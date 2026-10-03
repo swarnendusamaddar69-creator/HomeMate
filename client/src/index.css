@@ -1,0 +1,339 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Animation Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+  }
+}
+
+@keyframes pulseSoft {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes bounceMini {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
+  }
+  70% {
+    transform: translateY(2px);
+  }
+}
+
+/* Animation Utility Classes */
+.animate-fadeIn {
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulseSoft 2s infinite ease-in-out;
+}
+
+.animate-float {
+  animation: floatSlow 3.5s ease-in-out infinite;
+}
+
+.animate-bounce-mini {
+  animation: bounceMini 0.5s ease-out;
+}
+
+/* Staggered entrance animations */
+.stagger-1 {
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+.stagger-2 {
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+}
+.stagger-3 {
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.20s both;
+}
+.stagger-4 {
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.28s both;
+}
+
+.shimmer-bg {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Glassmorphism Utilities */
+.glass-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.glass-card-dark {
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.7);
+}
+
+/* Micro-interaction & Hover Utilities */
+.interactive-card {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease;
+  will-change: transform, box-shadow;
+}
+
+.interactive-card:hover {
+  transform: translateY(-4px) scale(1.006);
+  box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.08), 0 6px 14px -3px rgba(15, 23, 42, 0.04);
+}
+
+.interactive-card:active {
+  transform: scale(0.985);
+  transition-duration: 0.1s;
+}
+
+/* Glow Hovers */
+.hover-glow-emerald:hover {
+  box-shadow: 0 16px 32px -6px rgba(16, 185, 129, 0.22), 0 6px 14px -3px rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.hover-glow-amber:hover {
+  box-shadow: 0 16px 32px -6px rgba(245, 158, 11, 0.22), 0 6px 14px -3px rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.hover-glow-indigo:hover {
+  box-shadow: 0 16px 32px -6px rgba(99, 102, 241, 0.22), 0 6px 14px -3px rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.hover-glow-purple:hover {
+  box-shadow: 0 16px 32px -6px rgba(168, 85, 247, 0.22), 0 6px 14px -3px rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+/* Custom Smooth Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+}
+
+/* Tap highlight removal & smooth touch behavior for mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Ambient Background Orb Keyframes */
+@keyframes ambientFloat1 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(24px, -32px, 0) scale(1.08);
+  }
+}
+
+@keyframes ambientFloat2 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-28px, 28px, 0) scale(0.94);
+  }
+}
+
+@keyframes ambientPulseSoft {
+  0%, 100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.animate-ambientFloat1 {
+  animation: ambientFloat1 18s ease-in-out infinite;
+}
+
+.animate-ambientFloat2 {
+  animation: ambientFloat2 24s ease-in-out infinite;
+}
+
+.animate-ambientPulseSoft {
+  animation: ambientPulseSoft 14s ease-in-out infinite;
+}
+
+/* Distinct Atmospheric Backgrounds for Each Household Interface */
+.bg-theme-elder {
+  background-color: #fbf7ee;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(254, 240, 138, 0.5) 0px, transparent 55%),
+    radial-gradient(at 100% 0%, rgba(253, 186, 116, 0.4) 0px, transparent 55%),
+    radial-gradient(at 50% 100%, rgba(254, 215, 170, 0.35) 0px, transparent 65%),
+    linear-gradient(150deg, #fefce8 0%, #fffbeb 35%, #fff7ed 70%, #fef3c7 100%);
+  background-attachment: fixed;
+}
+
+.bg-theme-hostel {
+  background-color: #070a13;
+  background-image:
+    radial-gradient(at 10% 10%, rgba(99, 102, 241, 0.3) 0px, transparent 60%),
+    radial-gradient(at 90% 85%, rgba(168, 85, 247, 0.25) 0px, transparent 60%),
+    radial-gradient(at 50% 30%, rgba(6, 182, 212, 0.16) 0px, transparent 45%),
+    linear-gradient(165deg, #060911 0%, #0c1222 35%, #151b36 75%, #1e1b4b 100%);
+  background-attachment: fixed;
+}
+
+.bg-theme-family {
+  background-color: #f6faf7;
+  background-image:
+    radial-gradient(at 5% 5%, rgba(167, 243, 208, 0.7) 0px, transparent 55%),
+    radial-gradient(at 95% 80%, rgba(153, 246, 228, 0.6) 0px, transparent 55%),
+    radial-gradient(at 50% 50%, rgba(209, 250, 229, 0.5) 0px, transparent 65%),
+    linear-gradient(140deg, #f0fdf4 0%, #f8fafc 45%, #ecfdf5 80%, #f0fdfa 100%);
+  background-attachment: fixed;
+}
+
+/* Mobile Web Browser Optimizations */
+@media screen and (max-width: 640px) {
+  /* Prevent iOS Safari from auto-zooming on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Hide scrollbars for native-feeling horizontal swipe tabs */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Smooth Momentum Touch Scrolling */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe Area Inset Support for Modern Mobile Viewports */
+.safe-area-bottom {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}

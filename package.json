@@ -1,0 +1,16 @@
+{
+  "name": "homemate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HomeMate - AI Household Operating System for Elders, Hostel Students, and Families",
+  "scripts": {
+    "start": "node server/dist/index.js",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "npm run build --prefix server && npm run build --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
