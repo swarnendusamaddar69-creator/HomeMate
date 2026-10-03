@@ -61,19 +61,18 @@ export function App() {
     getStoredData<Language>('language', 'en')
   );
 
-  // User Authentication & Session state
+  // User Authentication & Session state (Real-World: only active if user signed in)
   const [currentUser, setCurrentUserState] = useState<UserAccount | null>(() => {
-    const saved = getCurrentUser();
-    return saved || DEFAULT_USERS[0]; // defaults to Nanaji for zero-friction launch
+    return getCurrentUser();
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    return !!getCurrentUser() || getStoredData<boolean>('is_logged_in', true);
+    return !!getCurrentUser();
   });
 
   const [currentMode, setCurrentMode] = useState<AppMode>(() => {
     const saved = getCurrentUser();
-    return saved?.mode || getStoredData<AppMode>('mode', 'elder');
+    return saved?.mode || getStoredData<AppMode>('mode', 'family');
   });
 
   // Household data

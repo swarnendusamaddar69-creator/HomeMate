@@ -85,11 +85,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     ? 'bg-amber-100 text-amber-900 border-amber-300'
     : 'bg-emerald-100 text-emerald-800 border-emerald-300';
 
-  const displayName = currentUser?.displayName || (
-    currentMode === 'elder' ? 'Nanaji' : currentMode === 'hostel' ? 'Rohan' : 'Sharma Family'
+  const displayName = currentUser?.displayName || currentUser?.username || (
+    currentMode === 'elder' ? 'Senior Resident' : currentMode === 'hostel' ? 'Flatmate' : 'Household Member'
   );
   const householdName = household?.name || currentUser?.householdName || (
-    currentMode === 'elder' ? 'Senior Living' : currentMode === 'hostel' ? 'Flat B-302' : 'The Sharmas'
+    currentMode === 'elder' ? 'Independent Living' : currentMode === 'hostel' ? 'Shared Flat' : 'Home'
   );
 
   return (

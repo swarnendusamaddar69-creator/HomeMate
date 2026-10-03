@@ -139,7 +139,7 @@ export const ElderMedsOrderHub: React.FC<ElderMedsOrderHubProps> = ({
         ? `*সঞ্জীবনী মেডিকেল স্টোর - ওষুধের অর্ডার*\nঅনুগ্রহ করে এই ওষুধগুলো বাড়িতে পাঠিয়ে দিন:`
         : `*Sanjivani Medical Store - Medicine Prescription Order*\nPlease deliver these medicines to home:`;
 
-    const text = `${header}\n\n${lines.join('\n')}\n\nPatient: Nanaji / Dadu (Flat 402)\nEmergency Contact: Priya (Daughter)\n\nSent via HomeMate AI OS`;
+    const text = `${header}\n\n${lines.join('\n')}\n\nOrder Source: HomeMate Senior Care Living\nDelivery: Home Address\n\nSent via HomeMate AI OS`;
 
     navigator.clipboard.writeText(text);
     setCopiedChemistToast(true);

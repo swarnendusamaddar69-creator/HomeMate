@@ -105,6 +105,8 @@ export interface BackendHealth {
 export interface UserAccount {
   id: string;
   username: string;
+  email?: string;
+  phone?: string;
   password?: string;
   displayName: string;
   role: 'admin' | 'member';
@@ -112,6 +114,8 @@ export interface UserAccount {
   householdName: string;
   mode: AppMode;
   avatar?: string;
+  city?: string;
+  createdAt?: string;
 }
 
 export interface Household {
@@ -121,6 +125,8 @@ export interface Household {
   accessCode: string;
   adminUsername: string;
   members: string[]; // list of usernames or display names
+  city?: string;
+  createdAt?: string;
 }
 
 export interface FamilyChore {

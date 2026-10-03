@@ -1,76 +1,113 @@
-# HomeMate — AI Household Operating System
+# 🏡 HomeMate — AI Household Operating System
 
-HomeMate is an intelligent household operating system designed around **one shared household brain with three adaptive faces**:
-- 👵 **Elder Care Mode**: Warm high-contrast aesthetics (>=48px touch targets), 1-tap "All OK" daily check-in with family notification, daily health & wellness **To-Do Checklist**, pill schedule with taken/skip tracking, and automatic refill requests.
-- 🎓 **Hostel Flat Mode**: Roommate chore rotation with a **Chai & Samosa Penalty Jar** (₹20 per skip), mess menu vs. ₹50 late-night shelf recipes, and **scannable 1-tap UPI QR codes** for splitting flat expenses.
-- 👨‍👩‍👧‍👦 **Family Home Mode**: Real-time collaborative grocery list with category filters, direct **WhatsApp Kirana Export**, 1-tap copy for quick commerce (Blinkit / Zepto / Instamart), chore fairness wheel, and utility bill tracking.
-- 📸 **Signature Hero: Live Device Camera & Opaque Dabba Memory**: Direct browser camera access (`getUserMedia`) to scan fridge contents in real-time, detect low stocks, remember stainless steel dabbas (`"Top Shelf steel container = Chana Dal"`), and auto-populate Kirana grocery lists.
-- ⚡ **Interactive Widget Center**: Live household climate & comfort sensor widget, Web Speech voice assistant HUD, and an in-app widget architecture guide recommending top open-source libraries.
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-home--mate--zeta.vercel.app-brightgreen?style=for-the-badge&logo=vercel)](https://home-mate-zeta.vercel.app/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React%2018-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Fastify](https://img.shields.io/badge/Fastify-000000?style=for-the-badge&logo=fastify&logoColor=white)](https://fastify.dev/)
 
----
+> **Live Production Web OS**: [https://home-mate-zeta.vercel.app/](https://home-mate-zeta.vercel.app/)
 
-## Architecture & Technology Stack
-
-- **Client (`/client`)**: Vite + React 18 + TypeScript + Tailwind CSS + Lucide Icons + `qrcode` + HTML5 MediaDevices API + Web Speech API. Supports PWA offline persistence via localStorage.
-- **Server (`/server`)**: Fastify + Node.js + TypeScript + Zod schema validation. Multimodal AI endpoints with Google Gemini integration & local high-fidelity fallback engine.
-- **Localization**: Default **English (en)**, with native support for **Hindi (हिंदी)** and **Bengali (বাংলা)**, including Hinglish/Banglish food synonym normalization (`aloo` ➔ `Potato`, `doodh` ➔ `Milk`).
+**HomeMate** is a real-world, intelligent household operating system crafted around **one shared household brain with three adaptive living interfaces**. Whether managing a busy family home, co-living in a shared flat / student hostel, or supporting senior citizens living independently, HomeMate unifies inventory, chores, finances, and wellness into a single, cohesive operating experience.
 
 ---
 
-## Getting Started
+## 🌟 Key Living Interfaces
 
-### 1. Install Dependencies
+### 👨‍👩‍👧‍👦 1. Family Home Living
+- **Collaborative Kirana & Grocery Hub**: Real-time pantry tracking with low-stock alerts, category sorting, and multi-user sync.
+- **Quick Commerce Dispatch**: Direct 1-tap export to **Zepto** (10-min), **Blinkit** (8-min), and **Instamart**, plus instant WhatsApp grocery lists for local Kirana stores.
+- **Fair Household Chores & Points Leaderboard**: Gamified responsibility tracking across family members with points and completion histories.
+- **Monthly Household Expense Calculator**: Unified breakdown of groceries, utilities, rent, and domestic maintenance.
+
+### 🎓 2. Shared Flat & Student Living (Hostel)
+- **Built-in Splitwise & UPI Settlements**: Group expense splitting with instant NPCI UPI QR code generation (`gpay://`, `phonepe://`, `paytm://`).
+- **Chore Penalty Jar**: Accountability system for flatmate chores with fun skip penalties (e.g., Chai & Samosa pool).
+- **Mess Menu & Late-Night Shelf Recipes**: Daily hostel mess tracking with 1-tap skip alerts and shelf-stable quick snack recipes.
+- **Multi-Tenant Roommate Sync**: Isolate your flat with a custom 6-character household code for private sharing.
+
+### 🧓 3. Senior & Elder Care
+- **High-Contrast, Accessible UI**: Clean typography, high-contrast visual cues, and oversized touch targets (≥48px).
+- **Daily Wellness & Routine Checklist**: Structured daily schedules for hydration, vitals check, walks, and family calls.
+- **Smart Medicine Schedule & Stock Refill**: Morning/afternoon/night pill reminders with refill thresholds and WhatsApp prescription dispatch to trusted chemists.
+- **1-Tap "All OK" Family Notification**: Instant peace of mind with 1-tap check-ins alerting designated family contacts.
+
+---
+
+## ⚡ Signature Real-World Features
+
+- **📸 Multimodal Fridge & Dabba Memory**: Direct browser camera access (`getUserMedia`) to scan real refrigerators and opaque containers (*"Top Shelf steel dabba = Chana Dal"*), automatically populating grocery restock lists.
+- **🎙️ Web Speech AI HUD**: Hands-free voice commands in English, Hindi, and Bengali to add groceries or check tasks while cooking.
+- **🔐 Real-World Multi-Tenant Authentication**:
+  - Secure personal registration (Name, Email, Password, Locality).
+  - Create a new household or join an existing flat using a 6-character access code.
+  - Per-household data isolation with persistent localStorage & backend API synchronization.
+- **🌐 Trilingual Localization**: Full support for **English**, **हिंदी (Hindi)**, and **বাংলা (Bengali)** with smart Indian grocery synonym recognition (`aloo` ➔ `Potato`, `doodh` ➔ `Milk`).
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technologies |
+|---|---|
+| **Frontend Web OS** | React 18, TypeScript, Vite, Tailwind CSS, Lucide Icons, QRcode |
+| **Media & Hardware APIs** | HTML5 MediaDevices (`getUserMedia`), Canvas API, Web Speech Recognition & Synthesis |
+| **Backend Service** | Fastify, Node.js, TypeScript, Zod validation |
+| **AI Vision Engine** | Google Gemini Multimodal API with fallback realistic vision engine |
+| **Hosting & CI/CD** | **Vercel** (Frontend SPA), Node.js / Docker (Backend API) |
+
+---
+
+## 🚀 Getting Started Locally
+
+### Prerequisites
+- Node.js (v18 or higher recommended)
+- npm or pnpm
+
+### 1. Clone the Repository
 ```bash
-# Root
+git clone https://github.com/swarnendusamaddar69-creator/HomeMate.git
+cd HomeMate
+```
+
+### 2. Install Dependencies
+```bash
+# Install root, server, and client dependencies
 npm install
-
-# Server
 cd server && npm install
-
-# Client
-cd client && npm install
+cd ../client && npm install
+cd ..
 ```
 
-### 2. Start Both Services in Development
-
-You can start both frontend and backend concurrently from the root directory:
-```bash
-npm run dev
-```
-
-Or run them in separate terminals:
-```bash
-# Terminal 1: Fastify Backend (Port 4000)
-cd server
-npm run dev
-
-# Terminal 2: React Frontend (Port 3000)
-cd client
-npm run dev
-```
-
-Visit **`http://localhost:3000`** in your browser.
-
----
-
-## Interactive Widgets & Suggestions
-
-HomeMate provides a built-in **Widget Center & Architecture Suggestions** modal accessible from the top navigation bar. It recommends industry-standard libraries:
-- **Environmental Data**: Open-Meteo REST API (free, zero API keys required).
-- **Icons & Status**: Lucide React (`lucide-react`).
-- **Payments & QR**: `qrcode` / `qrcode.react` with standard NPCI UPI URI schemes.
-- **Camera & Multimodal Vision**: Native `navigator.mediaDevices.getUserMedia` + HTML5 Canvas.
-- **Voice Recognition**: Web Speech API (`webkitSpeechRecognition` & `SpeechSynthesis`).
-- **Dashboard Charts**: Tremor (`@tremor/react`) & Recharts.
-
----
-
-## Environment Variables (Optional)
-
-Create a `.env` file in `/server`:
+### 3. Configure Environment Variables (Optional)
+Create `server/.env` based on `server/.env.example`:
 ```env
 PORT=4000
-DATABASE_URL=postgresql://user:password@localhost:5432/homemate
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
-*(Note: If no Gemini API key is provided, HomeMate uses its built-in realistic multimodal vision engine so all camera and voice features work offline!)*
+*(Note: If no Gemini API key is configured, HomeMate runs with its built-in realistic multimodal engine so all features work seamlessly offline).*
+
+### 4. Run the Development Server
+```bash
+# Starts both frontend (port 3000) and backend (port 4000) concurrently
+npm run dev
+```
+
+Open your browser at **`http://localhost:3000`**.
+
+---
+
+## ☁️ Deployment
+
+### Deploying to Vercel (Frontend)
+1. Push your repository to GitHub.
+2. Import the repository in [Vercel](https://vercel.com).
+3. Set the **Root Directory** to `client`.
+4. Build Command: `npm run build`
+5. Output Directory: `dist`
+6. Deploy! HomeMate is live at [https://home-mate-zeta.vercel.app/](https://home-mate-zeta.vercel.app/).
+
+---
+
+## 📄 License
+MIT License. Built for modern, stress-free households.

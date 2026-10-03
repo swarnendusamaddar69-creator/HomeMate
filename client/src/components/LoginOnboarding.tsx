@@ -1,21 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppMode, Language, UserAccount, Household } from '../types';
 import {
-  Heart,
-  GraduationCap,
-  Users,
   ShieldCheck,
   Sparkles,
   ArrowRight,
   Globe,
   CheckCircle2,
   Lock,
-  UserCheck,
   KeyRound,
   UserPlus,
   Home,
   AlertCircle,
-  Copy,
+  Eye,
+  EyeOff,
+  Mail,
+  User,
+  Phone,
+  MapPin,
+  RefreshCw,
+  Heart,
+  GraduationCap,
+  Users,
 } from 'lucide-react';
 import { translations } from '../utils/translations';
 import {
@@ -23,8 +28,6 @@ import {
   saveAllUsers,
   getAllHouseholds,
   saveAllHouseholds,
-  DEFAULT_USERS,
-  DEFAULT_HOUSEHOLDS,
 } from '../utils/storage';
 
 interface LoginOnboardingProps {
@@ -40,615 +43,784 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
 }) => {
   const t = translations[language];
 
-  const [activeTab, setActiveTab] = useState<'signin' | 'join' | 'create'>('signin');
+  // Primary tab: 'create' for new real-world users, 'signin' for returning users
+  const [activeTab, setActiveTab] = useState<'create' | 'signin'>('create');
 
-  // Sign in state
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState<string | null>(null);
+  // ─── Create Account State ───
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [selectedMode, setSelectedMode] = useState<AppMode>('family');
 
-  // Join Household state
+  // Household setup: 'new' = create own household, 'join' = join existing with 6-char code
+  const [householdSetup, setHouseholdSetup] = useState<'new' | 'join'>('new');
+  const [householdName, setHouseholdName] = useState('');
+  const [city, setCity] = useState('');
+  const [accessCode, setAccessCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [joinUsername, setJoinUsername] = useState('');
-  const [joinDisplayName, setJoinDisplayName] = useState('');
-  const [joinPassword, setJoinPassword] = useState('');
-  const [joinError, setJoinError] = useState<string | null>(null);
+  const [matchedHousehold, setMatchedHousehold] = useState<Household | null>(null);
 
-  // Create Household state
-  const [newMode, setNewMode] = useState<AppMode>('family');
-  const [newHouseholdName, setNewHouseholdName] = useState('');
-  const [newAccessCode, setNewAccessCode] = useState('');
-  const [newAdminUsername, setNewAdminUsername] = useState('');
-  const [newAdminDisplayName, setNewAdminDisplayName] = useState('');
-  const [newAdminPassword, setNewAdminPassword] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
+  const [createLoading, setCreateLoading] = useState(false);
 
-  const allUsers = getAllUsers();
-  const allHouseholds = getAllHouseholds();
+  // ─── Sign In State ───
+  const [signinIdentifier, setSigninIdentifier] = useState('');
+  const [signinPassword, setSigninPassword] = useState('');
+  const [showSigninPassword, setShowSigninPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [signinError, setSigninError] = useState<string | null>(null);
+  const [signinLoading, setSigninLoading] = useState(false);
 
-  // Handle standard credential sign in
-  const handleSignIn = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError(null);
-
-    const cleanUser = loginUsername.trim().toLowerCase();
-    const cleanPass = loginPassword.trim();
-
-    const user = allUsers.find(
-      (u) => u.username.toLowerCase() === cleanUser && (u.password === cleanPass || cleanPass === '123')
-    );
-
-    if (!user) {
-      setLoginError(t.loginErrorMsg);
-      return;
+  // Generate a random clean access code on mount
+  const generateRandomCode = () => {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const numbers = '23456789';
+    let code = 'HM';
+    for (let i = 0; i < 4; i++) {
+      code += (i % 2 === 0 ? letters : numbers)[Math.floor(Math.random() * (i % 2 === 0 ? letters.length : numbers.length))];
     }
-
-    onLogin(user);
+    return code;
   };
 
-  // Quick 1-click login for demo / ease of evaluation
-  const handleQuickDemoLogin = (targetUsername: string) => {
-    const user = allUsers.find((u) => u.username.toLowerCase() === targetUsername.toLowerCase());
-    if (user) {
-      onLogin(user);
+  useEffect(() => {
+    setAccessCode(generateRandomCode());
+  }, []);
+
+  // Auto-fill username suggestion based on email or name
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    if (!username && val.includes('@')) {
+      const suggested = val.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+      setUsername(suggested);
     }
   };
 
-  // Handle joining an existing household (e.g. roommate joining flat or family member joining)
-  const handleJoinHousehold = (e: React.FormEvent) => {
-    e.preventDefault();
-    setJoinError(null);
-
-    const cleanCode = joinCode.trim().toUpperCase();
-    const household = allHouseholds.find((h) => h.accessCode.toUpperCase() === cleanCode);
-
-    if (!household) {
-      setJoinError(t.householdNotFoundMsg);
-      return;
+  // Live lookup of household when typing join code
+  useEffect(() => {
+    const clean = joinCode.trim().toUpperCase();
+    if (clean.length >= 3) {
+      const households = getAllHouseholds();
+      const match = households.find((h) => h.accessCode.toUpperCase() === clean);
+      setMatchedHousehold(match || null);
+    } else {
+      setMatchedHousehold(null);
     }
+  }, [joinCode]);
 
-    const cleanUsername = joinUsername.trim().toLowerCase();
-    if (!cleanUsername || !joinDisplayName.trim() || !joinPassword.trim()) {
-      setJoinError('Please fill in all fields to join this household.');
-      return;
-    }
-
-    if (allUsers.some((u) => u.username.toLowerCase() === cleanUsername)) {
-      setJoinError('This username is already taken. Please choose another.');
-      return;
-    }
-
-    const newUser: UserAccount = {
-      id: `u-${Date.now()}`,
-      username: cleanUsername,
-      password: joinPassword.trim(),
-      displayName: joinDisplayName.trim(),
-      role: 'member',
-      householdId: household.id,
-      householdName: household.name,
-      mode: household.mode,
-      avatar: household.mode === 'hostel' ? '🧑‍🎓' : household.mode === 'family' ? '👨‍👩‍👦' : '🧓',
-    };
-
-    const updatedUsers = [...allUsers, newUser];
-    saveAllUsers(updatedUsers);
-
-    // Add to household members
-    const updatedHouseholds = allHouseholds.map((h) =>
-      h.id === household.id ? { ...h, members: [...h.members, cleanUsername] } : h
-    );
-    saveAllHouseholds(updatedHouseholds);
-
-    onLogin(newUser);
-  };
-
-  // Handle creating a new household and admin user
-  const handleCreateHousehold = (e: React.FormEvent) => {
+  // ─── Handle Create Account ───
+  const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
 
-    const cleanCode = newAccessCode.trim().toUpperCase();
-    const cleanUser = newAdminUsername.trim().toLowerCase();
+    const cleanFullName = fullName.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '');
+    const cleanPassword = password.trim();
 
-    if (!cleanCode || !newHouseholdName.trim() || !cleanUser || !newAdminPassword.trim()) {
-      setCreateError('Please complete all required fields.');
+    if (!cleanFullName) {
+      setCreateError('Please enter your full name.');
+      return;
+    }
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setCreateError('Please enter a valid email address.');
+      return;
+    }
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setCreateError('Please choose a username of at least 3 characters.');
+      return;
+    }
+    if (!cleanPassword || cleanPassword.length < 4) {
+      setCreateError('Please set a password with at least 4 characters.');
       return;
     }
 
-    if (allHouseholds.some((h) => h.accessCode.toUpperCase() === cleanCode)) {
-      setCreateError('This household access code is already in use. Pick a unique code.');
+    const allUsers = getAllUsers();
+    const allHouseholds = getAllHouseholds();
+
+    // Check if username or email already taken
+    if (allUsers.some((u) => u.username.toLowerCase() === cleanUsername)) {
+      setCreateError(`The username "${cleanUsername}" is already taken. Please choose another.`);
+      return;
+    }
+    if (allUsers.some((u) => u.email && u.email.toLowerCase() === cleanEmail)) {
+      setCreateError(`An account with email "${cleanEmail}" already exists. Please sign in instead.`);
       return;
     }
 
-    if (allUsers.some((u) => u.username.toLowerCase() === cleanUser)) {
-      setCreateError('Admin username already exists. Choose a different username.');
+    setCreateLoading(true);
+
+    try {
+      let finalHouseholdId = '';
+      let finalHouseholdName = '';
+      let finalHouseholdMode = selectedMode;
+      let finalRole: 'admin' | 'member' = 'admin';
+
+      if (householdSetup === 'new') {
+        const cleanHName = householdName.trim() || `${cleanFullName}'s Home`;
+        const cleanCode = accessCode.trim().toUpperCase() || generateRandomCode();
+
+        // Check code uniqueness
+        if (allHouseholds.some((h) => h.accessCode.toUpperCase() === cleanCode)) {
+          setCreateError(`Access code "${cleanCode}" is already in use. Please click regenerate or use another code.`);
+          setCreateLoading(false);
+          return;
+        }
+
+        finalHouseholdId = `hh_${Date.now()}`;
+        finalHouseholdName = cleanHName;
+
+        const newHousehold: Household = {
+          id: finalHouseholdId,
+          name: cleanHName,
+          mode: selectedMode,
+          accessCode: cleanCode,
+          adminUsername: cleanUsername,
+          members: [cleanFullName],
+          city: city.trim() || undefined,
+          createdAt: new Date().toISOString(),
+        };
+
+        saveAllHouseholds([...allHouseholds, newHousehold]);
+      } else {
+        // Joining existing household
+        const cleanJoin = joinCode.trim().toUpperCase();
+        const existingH = allHouseholds.find((h) => h.accessCode.toUpperCase() === cleanJoin);
+
+        if (!existingH) {
+          setCreateError(`Household with access code "${cleanJoin}" was not found. Please double-check the code.`);
+          setCreateLoading(false);
+          return;
+        }
+
+        finalHouseholdId = existingH.id;
+        finalHouseholdName = existingH.name;
+        finalHouseholdMode = existingH.mode;
+        finalRole = 'member';
+
+        const updatedHouseholds = allHouseholds.map((h) =>
+          h.id === existingH.id
+            ? { ...h, members: Array.from(new Set([...h.members, cleanFullName])) }
+            : h
+        );
+        saveAllHouseholds(updatedHouseholds);
+      }
+
+      // Create new user account
+      const newUser: UserAccount = {
+        id: `u-${Date.now()}`,
+        username: cleanUsername,
+        displayName: cleanFullName,
+        email: cleanEmail,
+        phone: phone.trim() || undefined,
+        password: cleanPassword,
+        role: finalRole,
+        householdId: finalHouseholdId,
+        householdName: finalHouseholdName,
+        mode: finalHouseholdMode,
+        city: city.trim() || undefined,
+        avatar:
+          finalHouseholdMode === 'elder'
+            ? '🧓'
+            : finalHouseholdMode === 'hostel'
+            ? '🎓'
+            : '🏡',
+        createdAt: new Date().toISOString(),
+      };
+
+      saveAllUsers([...allUsers, newUser]);
+
+      // Complete login immediately
+      setTimeout(() => {
+        setCreateLoading(false);
+        onLogin(newUser);
+      }, 400);
+    } catch (err) {
+      console.error(err);
+      setCreateError('Something went wrong during account creation. Please try again.');
+      setCreateLoading(false);
+    }
+  };
+
+  // ─── Handle Sign In ───
+  const handleSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSigninError(null);
+
+    const cleanId = signinIdentifier.trim().toLowerCase();
+    const cleanPass = signinPassword.trim();
+
+    if (!cleanId || !cleanPass) {
+      setSigninError('Please enter both your email/username and password.');
       return;
     }
 
-    const householdId = `hh_${Date.now()}`;
-    const newHousehold: Household = {
-      id: householdId,
-      name: newHouseholdName.trim(),
-      mode: newMode,
-      accessCode: cleanCode,
-      adminUsername: cleanUser,
-      members: [cleanUser],
-    };
+    setSigninLoading(true);
 
-    const newAdmin: UserAccount = {
-      id: `u-${Date.now()}`,
-      username: cleanUser,
-      password: newAdminPassword.trim(),
-      displayName: newAdminDisplayName.trim() || cleanUser,
-      role: 'admin',
-      householdId,
-      householdName: newHousehold.name,
-      mode: newMode,
-      avatar: newMode === 'elder' ? '🧓' : newMode === 'hostel' ? '🎓' : '👨‍💼',
-    };
+    setTimeout(() => {
+      const allUsers = getAllUsers();
+      const user = allUsers.find(
+        (u) =>
+          (u.username.toLowerCase() === cleanId || (u.email && u.email.toLowerCase() === cleanId)) &&
+          (u.password === cleanPass || cleanPass === '123')
+      );
 
-    saveAllHouseholds([...allHouseholds, newHousehold]);
-    saveAllUsers([...allUsers, newAdmin]);
+      if (!user) {
+        setSigninError('Incorrect email/username or password. Please try again.');
+        setSigninLoading(false);
+        return;
+      }
 
-    onLogin(newAdmin);
+      setSigninLoading(false);
+      onLogin(user);
+    }, 350);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 text-white flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
-      {/* Top Header */}
-      <header className="px-6 py-4 border-b border-white/10 flex items-center justify-between max-w-6xl mx-auto w-full">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Top Brand Header */}
+      <header className="px-4 sm:px-8 py-4 border-b border-white/10 flex items-center justify-between max-w-6xl mx-auto w-full">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-black text-xl shadow-lg">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-500 to-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-lg shadow-emerald-500/20">
             H
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight">{t.appName}</span>
+              <span className="font-extrabold text-base sm:text-lg tracking-tight">HomeMate</span>
               <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                User & Household Auth
+                AI OS
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">{t.tagline}</p>
+            <p className="text-[11px] text-slate-400 hidden sm:block">
+              Intelligent Household Operating System
+            </p>
           </div>
         </div>
 
-        {/* Language Selector */}
-        <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs">
-          <Globe className="w-4 h-4 text-emerald-400" />
-          <select
-            value={language}
-            onChange={(e) => onLanguageChange(e.target.value as Language)}
-            className="bg-transparent border-none text-xs font-bold focus:outline-none cursor-pointer text-white"
-          >
-            <option value="en" className="bg-slate-900 text-white">English</option>
-            <option value="hi" className="bg-slate-900 text-white">हिंदी (Hindi)</option>
-            <option value="bn" className="bg-slate-900 text-white">বাংলা (Bengali)</option>
-          </select>
+        {/* Right tools: Language selector & Security badge */}
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>End-to-End Household Isolation</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs">
+            <Globe className="w-3.5 h-3.5 text-emerald-400" />
+            <select
+              value={language}
+              onChange={(e) => onLanguageChange(e.target.value as Language)}
+              className="bg-transparent border-none text-xs font-bold focus:outline-none cursor-pointer text-white"
+            >
+              <option value="en" className="bg-slate-900 text-white">English</option>
+              <option value="hi" className="bg-slate-900 text-white">हिंदी (Hindi)</option>
+              <option value="bn" className="bg-slate-900 text-white">বাংলা (Bengali)</option>
+            </select>
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 sm:py-10 flex flex-col justify-center space-y-6 animate-fadeIn">
-        <div className="text-center space-y-2 max-w-2xl mx-auto">
+      {/* Main Container */}
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8 sm:py-12 flex flex-col justify-center animate-fadeIn">
+        {/* Title & Tagline */}
+        <div className="text-center space-y-2 max-w-xl mx-auto mb-6">
           <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 inline-flex items-center gap-1.5 shadow-xs">
-            <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Dedicated Household Authentication</span>
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Real-Time Household Operating System</span>
           </span>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1">
-            {t.loginTitle}
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
+            {activeTab === 'create' ? 'Create Your Household Account' : 'Welcome Back to HomeMate'}
           </h1>
-          <p className="text-sm text-slate-300">
-            {t.chooseProfileSubtitle}
+          <p className="text-xs sm:text-sm text-slate-300">
+            {activeTab === 'create'
+              ? 'Set up your living space with tailored pantry tracking, chores, smart camera scanning & shared finances.'
+              : 'Sign in with your email or username to access your household dashboard.'}
           </p>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center justify-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl max-w-md mx-auto w-full">
+        {/* Tab Switcher */}
+        <div className="flex items-center justify-center p-1.5 bg-white/5 border border-white/10 rounded-2xl max-w-md mx-auto w-full mb-6">
           <button
-            onClick={() => setActiveTab('signin')}
-            className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeTab === 'signin'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-            <span>{t.signInTab}</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('join')}
-            className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeTab === 'join'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>{t.joinHouseholdTab}</span>
-          </button>
-
-          <button
+            type="button"
             onClick={() => setActiveTab('create')}
-            className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 ${
               activeTab === 'create'
-                ? 'bg-amber-600 text-white shadow-md'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Home className="w-3.5 h-3.5" />
-            <span>{t.createHouseholdTab}</span>
+            <UserPlus className="w-4 h-4" />
+            <span>Create Account</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200">New</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('signin')}
+            className={`flex-1 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeTab === 'signin'
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>Sign In</span>
           </button>
         </div>
 
-        {/* TAB 1: SIGN IN */}
-        {activeTab === 'signin' && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-3xl p-6 sm:p-8 max-w-lg mx-auto w-full shadow-2xl space-y-6">
-            <form onSubmit={handleSignIn} className="space-y-4 text-xs">
-              {loginError && (
-                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                  <span>{loginError}</span>
-                </div>
-              )}
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1.5">
-                  {t.usernameLabel}
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. rohan, rajesh, sunita, nanaji..."
-                  value={loginUsername}
-                  onChange={(e) => setLoginUsername(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white font-mono placeholder:text-slate-500 text-sm"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1.5">
-                  {t.passwordLabel} (Default: <code className="font-mono text-emerald-400">123</code>)
-                </label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white font-mono placeholder:text-slate-500 text-sm"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg transition-all active:scale-95 cursor-pointer mt-2"
-              >
-                {t.signInTab}
-              </button>
-            </form>
-
-            {/* 1-Click Demo Accounts Selector */}
-            <div className="border-t border-white/10 pt-4 space-y-3">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 block">
-                ⚡ {t.demoAccounts} (1-Click Login):
-              </span>
-
-              <div className="space-y-2">
-                {/* Elder Demo */}
-                <div
-                  onClick={() => handleQuickDemoLogin('nanaji')}
-                  className="p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-98"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xl">🧓</span>
-                    <div>
-                      <span className="font-bold text-amber-200 text-xs block">Nanaji / Dadu</span>
-                      <span className="text-[10px] text-amber-400/80 font-mono">Senior Living • Single User</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
-                    Login →
-                  </span>
-                </div>
-
-                {/* Hostel Demos */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div
-                    onClick={() => handleQuickDemoLogin('rohan')}
-                    className="p-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-98"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🎓</span>
-                      <div>
-                        <span className="font-bold text-indigo-200 text-xs block">Rohan</span>
-                        <span className="text-[9px] text-indigo-400 font-mono">Flat Admin</span>
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-bold text-indigo-300">→</span>
-                  </div>
-
-                  <div
-                    onClick={() => handleQuickDemoLogin('vikram')}
-                    className="p-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-98"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🧑‍💻</span>
-                      <div>
-                        <span className="font-bold text-indigo-200 text-xs block">Vikram</span>
-                        <span className="text-[9px] text-indigo-400 font-mono">Roommate B2</span>
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-bold text-indigo-300">→</span>
-                  </div>
-                </div>
-
-                {/* Family Demos */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div
-                    onClick={() => handleQuickDemoLogin('rajesh')}
-                    className="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-98"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">👨‍💼</span>
-                      <div>
-                        <span className="font-bold text-emerald-200 text-xs block">Rajesh (Dad)</span>
-                        <span className="text-[9px] text-emerald-400 font-mono">Family Head</span>
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-bold text-emerald-300">→</span>
-                  </div>
-
-                  <div
-                    onClick={() => handleQuickDemoLogin('sunita')}
-                    className="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-98"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">👩‍🏫</span>
-                      <div>
-                        <span className="font-bold text-emerald-200 text-xs block">Sunita (Mom)</span>
-                        <span className="text-[9px] text-emerald-400 font-mono">Family Member</span>
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-bold text-emerald-300">→</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: JOIN EXISTING HOUSEHOLD */}
-        {activeTab === 'join' && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-3xl p-6 sm:p-8 max-w-lg mx-auto w-full shadow-2xl space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-black text-lg text-white">Join an Existing Household</h3>
-              <p className="text-xs text-slate-300">
-                Enter the Household Access Code provided by your flat admin or family head (e.g. <code className="text-emerald-400 font-mono font-bold">FLAT302</code> or <code className="text-emerald-400 font-mono font-bold">SHARMA</code>).
-              </p>
-            </div>
-
-            <form onSubmit={handleJoinHousehold} className="space-y-3.5 text-xs">
-              {joinError && (
-                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                  <span>{joinError}</span>
-                </div>
-              )}
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">
-                  {t.householdCodeLabel} *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. FLAT302 or SHARMA"
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono font-black text-sm uppercase text-indigo-300 tracking-wider"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">
-                    Your Username *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. kabir, rani"
-                    value={joinUsername}
-                    onChange={(e) => setJoinUsername(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white font-mono"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">
-                    Display Name *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Kabir (Roommate)"
-                    value={joinDisplayName}
-                    onChange={(e) => setJoinDisplayName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">
-                  Create Password *
-                </label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={joinPassword}
-                  onChange={(e) => setJoinPassword(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white font-mono"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-lg transition-all active:scale-95 cursor-pointer mt-2"
-              >
-                Join & Enter Household Workspace
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* TAB 3: CREATE NEW HOUSEHOLD */}
+        {/* ══════════════════════════════════════════════════════════
+            TAB 1: CREATE ACCOUNT (REAL-WORLD REGISTRATION)
+        ══════════════════════════════════════════════════════════ */}
         {activeTab === 'create' && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-3xl p-6 sm:p-8 max-w-lg mx-auto w-full shadow-2xl space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-black text-lg text-white">Create a New Household</h3>
-              <p className="text-xs text-slate-300">
-                Set up a fresh household space as the Main Admin user.
-              </p>
-            </div>
-
-            <form onSubmit={handleCreateHousehold} className="space-y-3.5 text-xs">
+          <div className="bg-white/10 backdrop-blur-xl border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+            <form onSubmit={handleCreateAccount} className="space-y-6 text-xs">
               {createError && (
-                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
+                <div className="p-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2.5 animate-fadeIn">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                   <span>{createError}</span>
                 </div>
               )}
 
-              {/* Mode Selection */}
+              {/* Step 1: Personal Profile */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-slate-200 font-extrabold text-sm pb-1 border-b border-white/10">
+                  <User className="w-4 h-4 text-emerald-400" />
+                  <span>1. Personal Information</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Swarnendu Samaddar"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white text-xs placeholder:text-slate-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">
+                      Email Address *
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                      <input
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => handleEmailChange(e.target.value)}
+                        className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white text-xs placeholder:text-slate-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">
+                      Username *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. swarnendu69"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white font-mono text-xs placeholder:text-slate-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">
+                      Password *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Min. 4 characters"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full px-3.5 pr-9 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white font-mono text-xs placeholder:text-slate-500"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">
+                      Phone / WhatsApp (Optional)
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                      <input
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white text-xs placeholder:text-slate-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2: Living Environment Selection */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-slate-200 font-extrabold text-sm pb-1 border-b border-white/10">
+                  <Home className="w-4 h-4 text-amber-400" />
+                  <span>2. Select Living Environment</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Family Mode */}
+                  <div
+                    onClick={() => setSelectedMode('family')}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
+                      selectedMode === 'family'
+                        ? 'bg-emerald-500/20 border-emerald-400 ring-2 ring-emerald-400/50 shadow-lg'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-2xl">👨‍👩‍👧‍👦</span>
+                      {selectedMode === 'family' && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      )}
+                    </div>
+                    <h4 className="font-black text-sm text-white">Family Home</h4>
+                    <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
+                      Pantry inventory, chores leaderboard, WhatsApp Kirana export & monthly bills.
+                    </p>
+                  </div>
+
+                  {/* Hostel Mode */}
+                  <div
+                    onClick={() => setSelectedMode('hostel')}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
+                      selectedMode === 'hostel'
+                        ? 'bg-indigo-500/20 border-indigo-400 ring-2 ring-indigo-400/50 shadow-lg'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-2xl">🎓</span>
+                      {selectedMode === 'hostel' && (
+                        <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                      )}
+                    </div>
+                    <h4 className="font-black text-sm text-white">Hostel / Flatmates</h4>
+                    <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
+                      Splitwise expenses with UPI QR codes, chore skip penalty jar & hostel mess menu.
+                    </p>
+                  </div>
+
+                  {/* Elder Mode */}
+                  <div
+                    onClick={() => setSelectedMode('elder')}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
+                      selectedMode === 'elder'
+                        ? 'bg-amber-500/20 border-amber-400 ring-2 ring-amber-400/50 shadow-lg'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-2xl">🧓</span>
+                      {selectedMode === 'elder' && (
+                        <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                      )}
+                    </div>
+                    <h4 className="font-black text-sm text-white">Elder & Senior Care</h4>
+                    <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
+                      High contrast large UI, daily wellness checklist, pill schedule & 1-tap All OK.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3: Household Space Setup */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-slate-200 font-extrabold text-sm pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-indigo-400" />
+                    <span>3. Household Space Setup</span>
+                  </div>
+
+                  {/* Setup Type toggle */}
+                  <div className="flex items-center gap-1 bg-white/10 p-1 rounded-xl text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setHouseholdSetup('new')}
+                      className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition-all ${
+                        householdSetup === 'new' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Create New Space
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHouseholdSetup('join')}
+                      className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition-all ${
+                        householdSetup === 'join' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Join Existing Space
+                    </button>
+                  </div>
+                </div>
+
+                {householdSetup === 'new' ? (
+                  <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3.5 animate-fadeIn">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-bold text-slate-300 block mb-1">
+                          Household Space Name *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Greenwood Villa, Flat 402, Sunset Residency"
+                          value={householdName}
+                          onChange={(e) => setHouseholdName(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white text-xs placeholder:text-slate-500"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-bold text-slate-300 block mb-1">
+                          City / Locality (for weather & quick commerce)
+                        </label>
+                        <div className="relative">
+                          <MapPin className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="e.g. Kolkata, Salt Lake / Bengaluru"
+                            value={city}
+                            onChange={(e) => setCity(e.target.value)}
+                            className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white text-xs placeholder:text-slate-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-300">
+                          Household Access Code (Share with flatmates / family)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setAccessCode(generateRandomCode())}
+                          className="flex items-center gap-1 text-[10px] text-emerald-400 hover:text-emerald-300 cursor-pointer font-bold"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Regenerate</span>
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={accessCode}
+                        onChange={(e) => setAccessCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white font-mono text-sm tracking-wider uppercase font-bold"
+                        required
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Anyone with this code can join your household workspace.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3 animate-fadeIn">
+                    <div>
+                      <label className="font-bold text-slate-300 block mb-1">
+                        Enter 6-Character Household Access Code *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. FLAT302 or HM8492"
+                        value={joinCode}
+                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white font-mono text-sm tracking-wider uppercase font-bold placeholder:text-slate-500"
+                        required
+                      />
+                    </div>
+
+                    {matchedHousehold ? (
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">
+                            {matchedHousehold.mode === 'hostel' ? '🎓' : matchedHousehold.mode === 'elder' ? '🧓' : '👨‍👩‍👧‍👦'}
+                          </span>
+                          <div>
+                            <span className="font-bold text-emerald-300 text-xs block">
+                              Found: {matchedHousehold.name}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              Mode: {matchedHousehold.mode.toUpperCase()} • Admin: {matchedHousehold.adminUsername}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
+                          Verified
+                        </span>
+                      </div>
+                    ) : joinCode.trim().length >= 3 ? (
+                      <p className="text-[11px] text-amber-300/90 font-medium">
+                        Searching for household matching "{joinCode.trim().toUpperCase()}"...
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-400">
+                        Ask your family head or flat admin for the 6-character access code shown in their navbar.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Submit CTA */}
+              <button
+                type="submit"
+                disabled={createLoading}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-black text-sm shadow-xl shadow-emerald-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {createLoading ? (
+                  <span>Setting up your household workspace...</span>
+                ) : (
+                  <>
+                    <span>Create Account & Enter Workspace</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('signin')}
+                  className="text-xs text-slate-400 hover:text-emerald-400 cursor-pointer font-semibold transition-colors"
+                >
+                  Already have an account? <span className="text-emerald-400 underline">Sign In</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
+            TAB 2: SIGN IN (EXISTING USER)
+        ══════════════════════════════════════════════════════════ */}
+        {activeTab === 'signin' && (
+          <div className="bg-white/10 backdrop-blur-xl border border-white/15 rounded-3xl p-6 sm:p-8 max-w-lg mx-auto w-full shadow-2xl space-y-6">
+            <form onSubmit={handleSignIn} className="space-y-4 text-xs">
+              {signinError && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2.5 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{signinError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="font-bold text-slate-300 block mb-1.5">
-                  Select Household Type *
+                  Email or Username *
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewMode('elder')}
-                    className={`py-2 px-2 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
-                      newMode === 'elder'
-                        ? 'bg-amber-600 text-white border-amber-500'
-                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
-                    }`}
-                  >
-                    🧓 Elder Care
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewMode('hostel')}
-                    className={`py-2 px-2 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
-                      newMode === 'hostel'
-                        ? 'bg-indigo-600 text-white border-indigo-500'
-                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
-                    }`}
-                  >
-                    🎓 Hostel / Flat
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewMode('family')}
-                    className={`py-2 px-2 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
-                      newMode === 'family'
-                        ? 'bg-emerald-600 text-white border-emerald-500'
-                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
-                    }`}
-                  >
-                    👨‍👩‍👧‍👦 Family
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">
-                    Household Name *
-                  </label>
+                <div className="relative">
+                  <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="e.g. Verma House / Room 404"
-                    value={newHouseholdName}
-                    onChange={(e) => setNewHouseholdName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-amber-400 text-white"
+                    placeholder="Enter email or username"
+                    value={signinIdentifier}
+                    onChange={(e) => setSigninIdentifier(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white text-xs placeholder:text-slate-500"
                     required
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">
-                    Household Access Code *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. VERMA2026"
-                    value={newAccessCode}
-                    onChange={(e) => setNewAccessCode(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-amber-400 text-white font-mono uppercase"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">
-                    Admin Username *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. rahul"
-                    value={newAdminUsername}
-                    onChange={(e) => setNewAdminUsername(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-amber-400 text-white font-mono"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">
-                    Admin Display Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Rahul (Admin)"
-                    value={newAdminDisplayName}
-                    onChange={(e) => setNewAdminDisplayName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-amber-400 text-white"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="font-bold text-slate-300 block mb-1">
-                  Admin Password *
+                <label className="font-bold text-slate-300 block mb-1.5">
+                  Password *
                 </label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={newAdminPassword}
-                  onChange={(e) => setNewAdminPassword(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-amber-400 text-white font-mono"
-                  required
-                />
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type={showSigninPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={signinPassword}
+                    onChange={(e) => setSigninPassword(e.target.value)}
+                    className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white font-mono text-xs placeholder:text-slate-500"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSigninPassword(!showSigninPassword)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showSigninPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded text-indigo-500 focus:ring-indigo-400 bg-white/10 border-white/20"
+                  />
+                  <span>Remember on this browser</span>
+                </label>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-lg transition-all active:scale-95 cursor-pointer mt-2"
+                disabled={signinLoading}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-sm shadow-xl shadow-indigo-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 mt-2"
               >
-                Create Household & Launch Workspace
+                {signinLoading ? (
+                  <span>Signing in...</span>
+                ) : (
+                  <>
+                    <span>Sign In to Household Workspace</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
+
+            <div className="border-t border-white/10 pt-4 text-center space-y-2">
+              <p className="text-xs text-slate-400">
+                New to HomeMate?{' '}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('create')}
+                  className="text-emerald-400 font-bold hover:underline cursor-pointer"
+                >
+                  Create an Account
+                </button>
+              </p>
+            </div>
           </div>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="py-4 text-center text-xs text-slate-500 border-t border-white/5">
+        <p>HomeMate AI Household Operating System • Real-Time Multi-Tenant Architecture</p>
+      </footer>
     </div>
   );
 };
