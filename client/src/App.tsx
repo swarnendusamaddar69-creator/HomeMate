@@ -89,79 +89,57 @@ export function App() {
 
   const activeHouseholdKey = getHouseholdKey(currentUser, currentMode);
 
-  // Strictly isolated per-household grocery & kirana lists
+  // Strictly isolated per-household grocery & kirana lists (raw user data)
   const [householdShoppingMap, setHouseholdShoppingMap] = useState<Record<string, ShoppingItem[]>>(() => {
-    return {
-      elder_home: getStoredData<ShoppingItem[]>('shopping_elder_home', INITIAL_SHOPPING_ELDER),
-      flat_b302: getStoredData<ShoppingItem[]>('shopping_flat_b302', INITIAL_SHOPPING_HOSTEL),
-      sharma_family: getStoredData<ShoppingItem[]>('shopping_sharma_family', INITIAL_SHOPPING_FAMILY),
-    };
+    return {};
   });
 
-  // Strictly isolated per-household fridge & pantry lists
+  // Strictly isolated per-household fridge & pantry lists (raw user data)
   const [householdPantryMap, setHouseholdPantryMap] = useState<Record<string, PantryItem[]>>(() => {
-    return {
-      elder_home: getStoredData<PantryItem[]>('pantry_elder_home', INITIAL_PANTRY_ELDER),
-      flat_b302: getStoredData<PantryItem[]>('pantry_flat_b302', INITIAL_PANTRY_HOSTEL),
-      sharma_family: getStoredData<PantryItem[]>('pantry_sharma_family', INITIAL_PANTRY_FAMILY),
-    };
+    return {};
   });
 
   // Active household's shopping items (100% isolated per household)
   const shoppingItems =
     householdShoppingMap[activeHouseholdKey] ||
-    getStoredData<ShoppingItem[]>(
-      `shopping_${activeHouseholdKey}`,
-      currentMode === 'elder'
-        ? INITIAL_SHOPPING_ELDER
-        : currentMode === 'hostel'
-        ? INITIAL_SHOPPING_HOSTEL
-        : INITIAL_SHOPPING_FAMILY
-    );
+    getStoredData<ShoppingItem[]>(`shopping_v3_${activeHouseholdKey}`, []);
 
   // Active household's pantry items (100% isolated per household)
   const pantryItems =
     householdPantryMap[activeHouseholdKey] ||
-    getStoredData<PantryItem[]>(
-      `pantry_${activeHouseholdKey}`,
-      currentMode === 'elder'
-        ? INITIAL_PANTRY_ELDER
-        : currentMode === 'hostel'
-        ? INITIAL_PANTRY_HOSTEL
-        : INITIAL_PANTRY_FAMILY
-    );
+    getStoredData<PantryItem[]>(`pantry_v3_${activeHouseholdKey}`, []);
 
-  // Domain data
+  // Domain data (Pure user-driven raw data)
   const [medicines, setMedicines] = useState<Medicine[]>(() =>
-    getStoredData<Medicine[]>('medicines', INITIAL_MEDICINES)
+    getStoredData<Medicine[]>('medicines_v3', [])
   );
 
   const [elderTodos, setElderTodos] = useState<ElderTodo[]>(() =>
-    getStoredData<ElderTodo[]>('elder_todos', INITIAL_ELDER_TODOS)
+    getStoredData<ElderTodo[]>('elder_todos_v3', [])
   );
 
   const [hostelChores, setHostelChores] = useState<HostelChore[]>(() =>
-    getStoredData<HostelChore[]>('chores', INITIAL_HOSTEL_CHORES)
+    getStoredData<HostelChore[]>('chores_v3', [])
   );
 
   const [hostelExpenses, setHostelExpenses] = useState<HostelExpense[]>(() =>
-    getStoredData<HostelExpense[]>('expenses', INITIAL_HOSTEL_EXPENSES)
+    getStoredData<HostelExpense[]>('expenses_v3', [])
   );
 
   const [messMenu, setMessMenu] = useState<MessMenuDay[]>(() =>
-    getStoredData<MessMenuDay[]>('mess', INITIAL_MESS_MENU)
+    getStoredData<MessMenuDay[]>('mess_v3', [])
   );
 
   const [familyChores, setFamilyChores] = useState<FamilyChore[]>(() =>
-    getStoredData<FamilyChore[]>('family_chores', INITIAL_FAMILY_CHORES)
+    getStoredData<FamilyChore[]>('family_chores_v3', [])
   );
 
   const [prescriptions, setPrescriptions] = useState<Prescription[]>(() =>
-    getStoredData<Prescription[]>('prescriptions', INITIAL_PRESCRIPTIONS)
+    getStoredData<Prescription[]>('prescriptions_v3', [])
   );
 
   const [medsToBuy, setMedsToBuy] = useState<MedicineToBuy[]>(() =>
-    getStoredData<MedicineToBuy[]>('meds_to_buy', INITIAL_MEDS_TO_BUY)
+    getStoredData<MedicineToBuy[]>('meds_to_buy_v3', [])
   );
 
   // Modals & Widgets toggles
@@ -184,28 +162,16 @@ export function App() {
     const hKey = getHouseholdKey(user, user.mode);
     setHouseholdShoppingMap((prev) => {
       if (prev[hKey]) return prev;
-      const initial =
-        user.mode === 'elder'
-          ? INITIAL_SHOPPING_ELDER
-          : user.mode === 'hostel'
-          ? INITIAL_SHOPPING_HOSTEL
-          : INITIAL_SHOPPING_FAMILY;
       return {
         ...prev,
-        [hKey]: getStoredData<ShoppingItem[]>(`shopping_${hKey}`, initial),
+        [hKey]: getStoredData<ShoppingItem[]>(`shopping_v3_${hKey}`, []),
       };
     });
     setHouseholdPantryMap((prev) => {
       if (prev[hKey]) return prev;
-      const initial =
-        user.mode === 'elder'
-          ? INITIAL_PANTRY_ELDER
-          : user.mode === 'hostel'
-          ? INITIAL_PANTRY_HOSTEL
-          : INITIAL_PANTRY_FAMILY;
       return {
         ...prev,
-        [hKey]: getStoredData<PantryItem[]>(`pantry_${hKey}`, initial),
+        [hKey]: getStoredData<PantryItem[]>(`pantry_v3_${hKey}`, []),
       };
     });
   };
@@ -243,35 +209,35 @@ export function App() {
   }, [currentMode]);
 
   useEffect(() => {
-    saveStoredData('medicines', medicines);
+    saveStoredData('medicines_v3', medicines);
   }, [medicines]);
 
   useEffect(() => {
-    saveStoredData('elder_todos', elderTodos);
+    saveStoredData('elder_todos_v3', elderTodos);
   }, [elderTodos]);
 
   useEffect(() => {
-    saveStoredData('chores', hostelChores);
+    saveStoredData('chores_v3', hostelChores);
   }, [hostelChores]);
 
   useEffect(() => {
-    saveStoredData('expenses', hostelExpenses);
+    saveStoredData('expenses_v3', hostelExpenses);
   }, [hostelExpenses]);
 
   useEffect(() => {
-    saveStoredData('mess', messMenu);
+    saveStoredData('mess_v3', messMenu);
   }, [messMenu]);
 
   useEffect(() => {
-    saveStoredData('family_chores', familyChores);
+    saveStoredData('family_chores_v3', familyChores);
   }, [familyChores]);
 
   useEffect(() => {
-    saveStoredData('prescriptions', prescriptions);
+    saveStoredData('prescriptions_v3', prescriptions);
   }, [prescriptions]);
 
   useEffect(() => {
-    saveStoredData('meds_to_buy', medsToBuy);
+    saveStoredData('meds_to_buy_v3', medsToBuy);
   }, [medsToBuy]);
 
   // Setters that persist strictly to the active household's isolated storage
@@ -279,15 +245,9 @@ export function App() {
     updater: (prev: ShoppingItem[]) => ShoppingItem[]
   ) => {
     setHouseholdShoppingMap((prevMap) => {
-      const currentList =
-        prevMap[activeHouseholdKey] ||
-        (currentMode === 'elder'
-          ? INITIAL_SHOPPING_ELDER
-          : currentMode === 'hostel'
-          ? INITIAL_SHOPPING_HOSTEL
-          : INITIAL_SHOPPING_FAMILY);
+      const currentList = prevMap[activeHouseholdKey] || [];
       const updated = updater(currentList);
-      saveStoredData(`shopping_${activeHouseholdKey}`, updated);
+      saveStoredData(`shopping_v3_${activeHouseholdKey}`, updated);
       return {
         ...prevMap,
         [activeHouseholdKey]: updated,
@@ -299,15 +259,9 @@ export function App() {
     updater: (prev: PantryItem[]) => PantryItem[]
   ) => {
     setHouseholdPantryMap((prevMap) => {
-      const currentList =
-        prevMap[activeHouseholdKey] ||
-        (currentMode === 'elder'
-          ? INITIAL_PANTRY_ELDER
-          : currentMode === 'hostel'
-          ? INITIAL_PANTRY_HOSTEL
-          : INITIAL_PANTRY_FAMILY);
+      const currentList = prevMap[activeHouseholdKey] || [];
       const updated = updater(currentList);
-      saveStoredData(`pantry_${activeHouseholdKey}`, updated);
+      saveStoredData(`pantry_v3_${activeHouseholdKey}`, updated);
       return {
         ...prevMap,
         [activeHouseholdKey]: updated,
