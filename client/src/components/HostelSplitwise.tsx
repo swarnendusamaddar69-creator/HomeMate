@@ -22,6 +22,9 @@ interface HostelSplitwiseProps {
   onSettleExpense: (id: string) => void;
   currentUser: UserAccount | null;
   language: Language;
+  householdMembers?: string[];
+  onAddMember?: (name: string) => void;
+  onDeleteMember?: (name: string) => void;
   onTriggerUpiModal: (title: string, amount: number, paidBy: string, upiId: string, expenseId: string) => void;
 }
 
@@ -31,18 +34,33 @@ export const HostelSplitwise: React.FC<HostelSplitwiseProps> = ({
   onSettleExpense,
   currentUser,
   language,
+  householdMembers = [],
+  onAddMember,
+  onDeleteMember,
   onTriggerUpiModal,
 }) => {
   const t = translations[language];
 
-  const roommates = ['Rohan', 'Vikram', 'Ankit'];
-  const userRoommateName = currentUser?.displayName?.includes('Rohan')
-    ? 'Rohan'
-    : currentUser?.displayName?.includes('Vikram')
-    ? 'Vikram'
-    : currentUser?.displayName?.includes('Ankit')
-    ? 'Ankit'
-    : 'Rohan';
+  // Dynamic Flatmates
+  const roommates = householdMembers.length > 0
+    ? householdMembers
+    : currentUser?.displayName
+    ? [currentUser.displayName]
+    : [];
+
+  const userRoommateName = currentUser?.displayName || roommates[0] || 'Me';
+
+  // Inline flatmate addition
+  const [showAddFlatmate, setShowAddFlatmate] = useState(false);
+  const [newFlatmateName, setNewFlatmateName] = useState('');
+
+  const handleAddFlatmateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFlatmateName.trim() || !onAddMember) return;
+    onAddMember(newFlatmateName.trim());
+    setNewFlatmateName('');
+    setShowAddFlatmate(false);
+  };
 
   // Add Expense form state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -51,19 +69,22 @@ export const HostelSplitwise: React.FC<HostelSplitwiseProps> = ({
   const [paidBy, setPaidBy] = useState(userRoommateName);
   const [selectedSplit, setSelectedSplit] = useState<string[]>(roommates);
   const [upiId, setUpiId] = useState(
-    userRoommateName === 'Rohan'
-      ? 'rohan@okhdfcbank'
-      : userRoommateName === 'Vikram'
-      ? 'vikram@paytm'
-      : 'ankit@upi'
+    `${userRoommateName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@upi`
   );
 
+  // Sync selected split when roommates change
+  React.useEffect(() => {
+    setSelectedSplit(roommates);
+  }, [householdMembers]);
+
   // Calculate Net Balances
-  // Total flat spend
   const totalSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // Compute how much each roommate paid (unsettled) and how much they owe (unsettled)
-  const balances: Record<string, number> = { Rohan: 0, Vikram: 0, Ankit: 0 };
+  const balances: Record<string, number> = {};
+  roommates.forEach((p) => {
+    balances[p] = 0;
+  });
 
   expenses.forEach((exp) => {
     if (!exp.settled) {
@@ -112,11 +133,7 @@ export const HostelSplitwise: React.FC<HostelSplitwiseProps> = ({
           to: creditor,
           amount: debtAmount,
           upiId:
-            creditor === 'Rohan'
-              ? 'rohan@okhdfcbank'
-              : creditor === 'Vikram'
-              ? 'vikram@paytm'
-              : 'ankit@upi',
+            `${creditor.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@upi`,
           expenseId: relatedExpense?.id,
         });
       }
@@ -173,13 +190,49 @@ export const HostelSplitwise: React.FC<HostelSplitwiseProps> = ({
           <p className="text-xs text-slate-500 mt-1">{t.splitwiseSubtitle}</p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-600/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>{t.addExpenseBtn}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {!showAddFlatmate ? (
+            <button
+              onClick={() => setShowAddFlatmate(true)}
+              className="px-3 py-2 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>+ Add Flatmate</span>
+            </button>
+          ) : (
+            <form onSubmit={handleAddFlatmateSubmit} className="flex items-center gap-1">
+              <input
+                type="text"
+                placeholder="Flatmate name..."
+                value={newFlatmateName}
+                onChange={(e) => setNewFlatmateName(e.target.value)}
+                className="px-3 py-1.5 rounded-xl border border-indigo-300 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36"
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="px-2.5 py-1.5 rounded-xl bg-indigo-600 text-white font-bold text-xs cursor-pointer"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddFlatmate(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </form>
+          )}
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-600/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>{t.addExpenseBtn}</span>
+          </button>
+        </div>
       </div>
 
       {/* Overview Stat Cards */}
@@ -228,25 +281,42 @@ export const HostelSplitwise: React.FC<HostelSplitwiseProps> = ({
 
         {/* Flatmate Quick Balances */}
         <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex flex-col justify-between">
-          <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider block">
-            Roommate Breakdown
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider block">
+              Flatmate Breakdown ({roommates.length})
+            </span>
+          </div>
           <div className="space-y-1 mt-1 text-xs">
-            {roommates.map((p) => {
-              const b = Math.round(balances[p] || 0);
-              return (
-                <div key={p} className="flex items-center justify-between">
-                  <span className="text-slate-700 font-medium">{p}:</span>
-                  <span
-                    className={`font-mono font-bold ${
-                      b > 0 ? 'text-emerald-600' : b < 0 ? 'text-rose-600' : 'text-slate-400'
-                    }`}
-                  >
-                    {b > 0 ? `+₹${b}` : b < 0 ? `-₹${Math.abs(b)}` : '₹0'}
-                  </span>
-                </div>
-              );
-            })}
+            {roommates.length === 0 ? (
+              <span className="text-slate-400 text-[11px] italic">No flatmates added yet</span>
+            ) : (
+              roommates.map((p) => {
+                const b = Math.round(balances[p] || 0);
+                return (
+                  <div key={p} className="flex items-center justify-between group">
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-700 font-medium truncate max-w-[100px]">{p}:</span>
+                      {onDeleteMember && roommates.length > 1 && (
+                        <button
+                          onClick={() => onDeleteMember(p)}
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 text-[10px] cursor-pointer"
+                          title={`Remove ${p}`}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <span
+                      className={`font-mono font-bold ${
+                        b > 0 ? 'text-emerald-600' : b < 0 ? 'text-rose-600' : 'text-slate-400'
+                      }`}
+                    >
+                      {b > 0 ? `+₹${b}` : b < 0 ? `-₹${Math.abs(b)}` : '₹0'}
+                    </span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
@@ -451,9 +521,7 @@ export const HostelSplitwise: React.FC<HostelSplitwiseProps> = ({
                     value={paidBy}
                     onChange={(e) => {
                       setPaidBy(e.target.value);
-                      if (e.target.value === 'Rohan') setUpiId('rohan@okhdfcbank');
-                      else if (e.target.value === 'Vikram') setUpiId('vikram@paytm');
-                      else setUpiId('ankit@upi');
+                      setUpiId(`${e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@upi`);
                     }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold"
                   >

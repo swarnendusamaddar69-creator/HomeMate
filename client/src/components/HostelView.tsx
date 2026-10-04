@@ -51,6 +51,9 @@ interface HostelViewProps {
   onDeleteShoppingItem: (id: string) => void;
   onAddShoppingItem: (item: Omit<ShoppingItem, 'id'>) => void;
   onEditShoppingItem: (id: string, updated: { title: string; quantity: string; category?: string }) => void;
+  householdMembers?: string[];
+  onAddMember?: (name: string) => void;
+  onDeleteMember?: (name: string) => void;
 }
 
 export const HostelView: React.FC<HostelViewProps> = ({
@@ -72,8 +75,18 @@ export const HostelView: React.FC<HostelViewProps> = ({
   onDeleteShoppingItem,
   onAddShoppingItem,
   onEditShoppingItem,
+  householdMembers = [],
+  onAddMember,
+  onDeleteMember,
 }) => {
   const [examMode, setExamMode] = useState(false);
+
+  // Dynamic Flatmates
+  const roommates = householdMembers.length > 0
+    ? householdMembers
+    : currentUser?.displayName
+    ? [currentUser.displayName]
+    : [];
 
   // Grocery State
   const [newSnackTitle, setNewSnackTitle] = useState('');
@@ -87,9 +100,15 @@ export const HostelView: React.FC<HostelViewProps> = ({
   // Chore creation state
   const [showAddChoreModal, setShowAddChoreModal] = useState(false);
   const [choreTask, setChoreTask] = useState('');
-  const [choreAssignee, setChoreAssignee] = useState('Rohan');
+  const [choreAssignee, setChoreAssignee] = useState(roommates[0] || 'Me');
   const [choreDue, setChoreDue] = useState('Today, 8 PM');
   const [aiChoreToast, setAiChoreToast] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (roommates.length > 0 && (!choreAssignee || choreAssignee === 'Me')) {
+      setChoreAssignee(roommates[0]);
+    }
+  }, [householdMembers]);
 
   const t = translations[language];
 
@@ -106,7 +125,6 @@ export const HostelView: React.FC<HostelViewProps> = ({
   const totalSkips = chores.reduce((acc, curr) => acc + (curr.skipCount || 0), 0);
   const penaltyFund = totalSkips * 20 + 80;
 
-  const roommates = ['Rohan', 'Vikram', 'Ankit'];
   const todayMess = messMenu[0] || {
     day: 'Today',
     lunch: 'Chole Bhature & Raita',
@@ -160,12 +178,13 @@ export const HostelView: React.FC<HostelViewProps> = ({
 
   const handleConvertSnackToExpense = (itemTitle: string) => {
     const estimatedAmount = 120;
+    const payer = currentUser?.displayName || roommates[0] || 'Me';
     onAddExpense({
       title: `Snacks: ${itemTitle}`,
       amount: estimatedAmount,
-      paidBy: currentUser?.displayName?.includes('Vikram') ? 'Vikram' : currentUser?.displayName?.includes('Ankit') ? 'Ankit' : 'Rohan',
-      splitWith: roommates,
-      upiId: 'rohan@okhdfcbank',
+      paidBy: payer,
+      splitWith: roommates.length > 0 ? roommates : [payer],
+      upiId: `${payer.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@upi`,
       settled: false,
     });
   };
@@ -187,24 +206,28 @@ export const HostelView: React.FC<HostelViewProps> = ({
 
   const handleAiSuggestFlatChore = () => {
     const ideas = [
-      { task: 'Clean shared microwave and wipe gas burner grease', assignee: 'Vikram', due: 'Tonight, 10 PM' },
-      { task: 'Throw out empty delivery cartons & pizza boxes', assignee: 'Ankit', due: 'Tomorrow 9 AM' },
-      { task: 'Refill 20L Bisleri drinking water canister', assignee: 'Rohan', due: 'Today, 7 PM' },
-      { task: 'Wipe kitchen counter and sweep common balcony', assignee: 'Vikram', due: 'Saturday' },
-      { task: 'Defrost shared fridge & wipe door bottle racks', assignee: 'Ankit', due: 'Sunday Morning' },
+      { task: 'Clean shared microwave and wipe gas burner grease', due: 'Tonight, 10 PM' },
+      { task: 'Throw out empty delivery cartons & pizza boxes', due: 'Tomorrow 9 AM' },
+      { task: 'Refill 20L Bisleri drinking water canister', due: 'Today, 7 PM' },
+      { task: 'Wipe kitchen counter and sweep common balcony', due: 'Saturday' },
+      { task: 'Defrost shared fridge & wipe door bottle racks', due: 'Sunday Morning' },
     ];
 
     const pick = ideas.find((i) => !chores.some((c) => c.task === i.task)) || ideas[0];
+    const targetAssignee = roommates.length > 0
+      ? roommates[Math.floor(Math.random() * roommates.length)]
+      : (currentUser?.displayName || 'Me');
+
     onAddChore({
       task: pick.task,
-      assignee: pick.assignee,
-      room: 'B-302',
+      assignee: targetAssignee,
+      room: 'Common Area',
       dueDate: pick.due,
       status: 'pending',
       skipCount: 0,
     });
 
-    setAiChoreToast(`✨ AI Chore Added: "${pick.task}" assigned to ${pick.assignee}`);
+    setAiChoreToast(`✨ AI Chore Added: "${pick.task}" assigned to ${targetAssignee}`);
     setTimeout(() => setAiChoreToast(null), 3500);
   };
 
@@ -214,8 +237,8 @@ export const HostelView: React.FC<HostelViewProps> = ({
 
     onAddChore({
       task: choreTask.trim(),
-      assignee: choreAssignee,
-      room: 'B-302',
+      assignee: choreAssignee || roommates[0] || 'Me',
+      room: 'Common Area',
       dueDate: choreDue,
       status: 'pending',
       skipCount: 0,
@@ -270,6 +293,9 @@ export const HostelView: React.FC<HostelViewProps> = ({
         onSettleExpense={onSettleExpense}
         currentUser={currentUser}
         language={language}
+        householdMembers={householdMembers}
+        onAddMember={onAddMember}
+        onDeleteMember={onDeleteMember}
         onTriggerUpiModal={(title, amount, paidBy, upiId, expenseId) =>
           setActiveUpiModal({ title, amount, paidBy, upiId, expenseId })
         }
@@ -283,6 +309,7 @@ export const HostelView: React.FC<HostelViewProps> = ({
         hostelChores={chores}
         hostelExpenses={expenses}
         currentUser={currentUser}
+        householdMembers={householdMembers}
         onTriggerUpiModal={(title, amount, paidBy, upiId, expenseId) =>
           setActiveUpiModal({ title, amount, paidBy, upiId, expenseId })
         }
@@ -782,6 +809,9 @@ export const HostelView: React.FC<HostelViewProps> = ({
                         {r}
                       </option>
                     ))}
+                    {roommates.length === 0 && (
+                      <option value="Me">Me</option>
+                    )}
                   </select>
                 </div>
 
@@ -861,7 +891,7 @@ export const HostelView: React.FC<HostelViewProps> = ({
               title: `Snacks: ${title}`,
               amount,
               paidBy,
-              splitWith: roommates,
+              splitWith: roommates.length > 0 ? roommates : [paidBy],
               upiId,
               settled: false,
             });
@@ -869,9 +899,10 @@ export const HostelView: React.FC<HostelViewProps> = ({
               onToggleShoppingItem(splitModalItem.id);
             }
             playChimeSound();
-            const share = Math.round(amount / roommates.length);
+            const flatmateCount = Math.max(1, roommates.length);
+            const share = Math.round(amount / flatmateCount);
             setSplitSuccessToast(
-              `🎉 Split added for "${title}"! Total ₹${amount} divided among 3 flatmates (₹${share}/person)`
+              `🎉 Split added for "${title}"! Total ₹${amount} divided among ${flatmateCount} flatmate${flatmateCount > 1 ? 's' : ''} (₹${share}/person)`
             );
             setTimeout(() => setSplitSuccessToast(null), 5000);
             setSplitModalItem(null);
@@ -881,7 +912,7 @@ export const HostelView: React.FC<HostelViewProps> = ({
               title: `Snacks: ${title}`,
               amount,
               paidBy,
-              splitWith: roommates,
+              splitWith: roommates.length > 0 ? roommates : [paidBy],
               upiId,
               settled: false,
             });
@@ -890,9 +921,10 @@ export const HostelView: React.FC<HostelViewProps> = ({
             }
             playChimeSound();
             setSplitModalItem(null);
+            const flatmateCount = Math.max(1, roommates.length);
             setActiveUpiModal({
               title: `Split: ${title}`,
-              amount: Math.round(amount / roommates.length),
+              amount: Math.round(amount / flatmateCount),
               paidBy,
               upiId,
               expenseId: `e-split-${Date.now()}`,

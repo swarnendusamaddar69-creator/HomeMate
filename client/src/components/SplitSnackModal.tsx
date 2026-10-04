@@ -44,8 +44,15 @@ export const SplitSnackModal: React.FC<SplitSnackModalProps> = ({
   onOpenUpiQr,
   language,
 }) => {
+  const activeRoommates = roommates.length > 0
+    ? roommates
+    : currentUser?.displayName
+    ? [currentUser.displayName]
+    : ['Me'];
+
   const [billAmount, setBillAmount] = useState<number>(120);
-  const [paidBy, setPaidBy] = useState<string>('Rohan');
+  const [paidBy, setPaidBy] = useState<string>(currentUser?.displayName || activeRoommates[0] || 'Me');
+  const [customUpi, setCustomUpi] = useState<string>('');
   const [markBought, setMarkBought] = useState<boolean>(true);
 
   const t = translations[language];
@@ -67,27 +74,18 @@ export const SplitSnackModal: React.FC<SplitSnackModalProps> = ({
       
       setBillAmount(defaultAmt);
 
-      const defaultPayer = currentUser?.displayName?.includes('Vikram')
-        ? 'Vikram'
-        : currentUser?.displayName?.includes('Ankit')
-        ? 'Ankit'
-        : 'Rohan';
+      const defaultPayer = currentUser?.displayName || activeRoommates[0] || 'Me';
       setPaidBy(defaultPayer);
+      setCustomUpi(`${defaultPayer.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@upi`);
       setMarkBought(true);
     }
-  }, [item, currentUser]);
+  }, [item, currentUser, roommates]);
 
   if (!isOpen || !item) return null;
 
-  const upiIdMap: Record<string, string> = {
-    Rohan: 'rohan@okhdfcbank',
-    Vikram: 'vikram@paytm',
-    Ankit: 'ankit@upi',
-  };
-
-  const selectedUpi = upiIdMap[paidBy] || 'rohan@okhdfcbank';
+  const selectedUpi = customUpi.trim() || `${paidBy.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@upi`;
   const validAmount = Math.max(1, billAmount || 0);
-  const sharePerPerson = Math.round(validAmount / Math.max(1, roommates.length));
+  const sharePerPerson = Math.round(validAmount / Math.max(1, activeRoommates.length));
 
   const handleConfirmSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,11 +109,15 @@ export const SplitSnackModal: React.FC<SplitSnackModalProps> = ({
               <h3 className="font-black text-base text-slate-900 flex items-center gap-1.5">
                 <span>{language === 'hi' ? 'फ्लैट में खर्च बांटें' : language === 'bn' ? 'ফ্ল্যাটে খরচ ভাগ করুন' : 'Split in Flat (Splitwise)'}</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold">
-                  B-302
+                  Shared Bill
                 </span>
               </h3>
               <p className="text-xs text-slate-500">
-                {language === 'hi' ? '3 रूममेट्स में बराबर हिस्सा' : language === 'bn' ? '৩ জন রুমমেটের মধ্যে সমান ভাগ' : 'Equal 3-way split among roommates'}
+                {language === 'hi'
+                  ? `${activeRoommates.length} सदस्यों में बराबर हिस्सा`
+                  : language === 'bn'
+                  ? `${activeRoommates.length} জনের মধ্যে সমান ভাগ`
+                  : `Equal split among ${activeRoommates.length} flatmates`}
               </p>
             </div>
           </div>
@@ -174,42 +176,59 @@ export const SplitSnackModal: React.FC<SplitSnackModalProps> = ({
             <label className="font-bold text-slate-700 block mb-1.5">
               {language === 'hi' ? 'भुगतान किसने किया?' : language === 'bn' ? 'টাকা কে দিয়েছে?' : 'Who Paid for This?'}
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {roommates.map((name) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {activeRoommates.map((name) => (
                 <button
                   key={name}
                   type="button"
-                  onClick={() => setPaidBy(name)}
+                  onClick={() => {
+                    setPaidBy(name);
+                    setCustomUpi(`${name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@upi`);
+                  }}
                   className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
                     paidBy === name
                       ? 'bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300'
                       : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                   }`}
                 >
-                  <span>{name}</span>
+                  <span className="truncate max-w-[100px]">{name}</span>
                   <span className={`text-[10px] font-normal ${paidBy === name ? 'text-indigo-200' : 'text-slate-400'}`}>
-                    {name === 'Rohan' ? 'Admin' : name === 'Vikram' ? 'B2' : 'B3'}
+                    {name === currentUser?.displayName ? 'You' : 'Member'}
                   </span>
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Payee UPI ID */}
+          <div>
+            <label className="font-bold text-slate-700 block mb-1">
+              Payee UPI ID (for QR code & reimbursement)
+            </label>
+            <input
+              type="text"
+              value={customUpi}
+              onChange={(e) => setCustomUpi(e.target.value)}
+              placeholder="e.g. yourname@okhdfcbank"
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
+            />
+          </div>
+
           {/* Live Splitwise Equal Share Division Card */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-950 to-slate-900 text-white border border-indigo-800 shadow-inner space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-indigo-300 uppercase tracking-wider font-bold">
-                {language === 'hi' ? '3 रूममेट्स में बराबर विभाजन' : language === 'bn' ? 'সমান ভাগ' : 'Equal Flatmate Division'}
+                {language === 'hi' ? `${activeRoommates.length} सदस्यों में विभाजन` : language === 'bn' ? `${activeRoommates.length} জনে সমান ভাগ` : `Equal ${activeRoommates.length}-Way Division`}
               </span>
               <span className="text-xs font-black text-amber-300 bg-amber-400/20 px-2.5 py-0.5 rounded-full border border-amber-400/30">
                 ₹{sharePerPerson} / person
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-indigo-800/80 text-[11px]">
-              {roommates.map((name) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-indigo-800/80 text-[11px]">
+              {activeRoommates.map((name) => (
                 <div key={name} className="p-2 rounded-xl bg-white/5 border border-white/10 text-center">
-                  <span className="text-slate-300 block font-semibold">{name}</span>
+                  <span className="text-slate-300 block font-semibold truncate">{name}</span>
                   <span className={`font-mono font-bold mt-0.5 block ${paidBy === name ? 'text-emerald-400' : 'text-amber-300'}`}>
                     {paidBy === name ? `Paid ₹${validAmount}` : `Owes ₹${sharePerPerson}`}
                   </span>

@@ -59,6 +59,7 @@ interface ElderViewProps {
   onUpdateMedicineStatus: (id: string, status: 'needed' | 'ordered' | 'received') => void;
   onDeleteMedicineToBuy: (id: string) => void;
   currentUser: UserAccount | null;
+  householdMembers?: string[];
 }
 
 export const ElderView: React.FC<ElderViewProps> = ({
@@ -82,6 +83,7 @@ export const ElderView: React.FC<ElderViewProps> = ({
   onUpdateMedicineStatus,
   onDeleteMedicineToBuy,
   currentUser,
+  householdMembers = [],
 }) => {
   const [morningCheckedIn, setMorningCheckedIn] = useState(false);
   const [newTodoText, setNewTodoText] = useState('');
@@ -958,6 +960,7 @@ export const ElderView: React.FC<ElderViewProps> = ({
         language={language}
         shoppingItems={shoppingItems}
         currentUser={currentUser}
+        householdMembers={householdMembers}
       />
 
       {/* Edit Grocery Item Modal */}

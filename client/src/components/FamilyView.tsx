@@ -35,6 +35,9 @@ interface FamilyViewProps {
   onAddFamilyChore: (chore: Omit<FamilyChore, 'id'>) => void;
   onDeleteFamilyChore: (id: string) => void;
   onRefreshFamilyChores: () => void;
+  householdMembers?: string[];
+  onAddMember?: (name: string) => void;
+  onDeleteMember?: (name: string) => void;
 }
 
 export const FamilyView: React.FC<FamilyViewProps> = ({
@@ -51,6 +54,9 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
   onAddFamilyChore,
   onDeleteFamilyChore,
   onRefreshFamilyChores,
+  householdMembers = [],
+  onAddMember,
+  onDeleteMember,
 }) => {
   const [manualTitle, setManualTitle] = useState('');
   const [manualQty, setManualQty] = useState('');
@@ -186,6 +192,9 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
         onRefreshChores={onRefreshFamilyChores}
         currentUser={currentUser}
         language={language}
+        householdMembers={householdMembers}
+        onAddMember={onAddMember}
+        onDeleteMember={onDeleteMember}
       />
 
       {/* 3. SHARED KIRANA & MONTHLY BILLS */}
@@ -427,6 +436,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
         shoppingItems={shoppingItems}
         familyChores={familyChores}
         currentUser={currentUser}
+        householdMembers={householdMembers}
       />
 
       {/* 4. QUICK COMMERCE RECOMMENDATIONS & PRICE COMPARISON */}

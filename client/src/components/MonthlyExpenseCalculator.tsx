@@ -35,6 +35,7 @@ interface MonthlyExpenseCalculatorProps {
   familyChores?: FamilyChore[];
   hostelExpenses?: HostelExpense[];
   currentUser: UserAccount | null;
+  householdMembers?: string[];
   onTriggerUpiModal?: (
     title: string,
     amount: number,
@@ -62,6 +63,7 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
   familyChores = [],
   hostelExpenses = [],
   currentUser,
+  householdMembers = [],
   onTriggerUpiModal,
 }) => {
   const t = translations[language];
@@ -167,8 +169,12 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
   const percentUsed = Math.min(100, Math.round((totalMonthlySpend / budgetCap) * 100));
 
   // Splitwise calculation for Hostel
-  const roommates = ['Rohan', 'Vikram', 'Ankit'];
-  const hostelPerPerson = Math.round(totalMonthlySpend / roommates.length);
+  const activeMembers = householdMembers && householdMembers.length > 0
+    ? householdMembers
+    : currentUser?.displayName
+    ? [currentUser.displayName]
+    : ['Me'];
+  const hostelPerPerson = Math.round(totalMonthlySpend / Math.max(1, activeMembers.length));
 
   const handleAddCustomExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,8 +218,8 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
 
     if (mode === 'hostel') {
       text += `\n🤝 *Hostel Splitwise Equal Share*:\n`;
-      text += `₹${totalMonthlySpend} ÷ 3 roommates = *₹${hostelPerPerson} / person*\n`;
-      text += `(Split between Rohan, Vikram, Ankit)\n`;
+      text += `₹${totalMonthlySpend} ÷ ${activeMembers.length} flatmates = *₹${hostelPerPerson} / person*\n`;
+      text += `(Split among: ${activeMembers.join(', ')})\n`;
     }
 
     text += `\nGenerated automatically via HomeMate AI OS`;
@@ -407,11 +413,11 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
                   Splitwise Equal Division
                 </span>
                 <span className="text-xs text-indigo-200">
-                  Total ₹{totalMonthlySpend} ÷ 3 Flatmates
+                  Total ₹{totalMonthlySpend} ÷ {activeMembers.length} Flatmates
                 </span>
               </div>
               <h4 className="text-xl font-black text-white mt-1">
-                Each Roommate Owes: <span className="font-mono text-emerald-400">₹{hostelPerPerson}</span>
+                Each Flatmate Owes: <span className="font-mono text-emerald-400">₹{hostelPerPerson}</span>
               </h4>
               <p className="text-xs text-indigo-200 mt-0.5">
                 Includes all bought groceries, midnight runs, chore penalty fund, Wi-Fi fiber & RO refills
@@ -421,11 +427,13 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
             <button
               onClick={() => {
                 if (onTriggerUpiModal) {
+                  const adminName = activeMembers[0] || currentUser?.displayName || 'Flat Admin';
+                  const adminUpi = `${adminName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'admin'}@upi`;
                   onTriggerUpiModal(
                     'Hostel Monthly Flat Share',
                     hostelPerPerson,
-                    'Rohan (Flat Admin)',
-                    'rohan@okhdfcbank',
+                    `${adminName} (Flat Admin)`,
+                    adminUpi,
                     'monthly_split_hostel'
                   );
                 }
@@ -438,7 +446,7 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            {roommates.map((person) => (
+            {activeMembers.map((person) => (
               <div
                 key={person}
                 className="p-3 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-between text-xs"
@@ -452,7 +460,7 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
                     ₹{hostelPerPerson}
                   </span>
                   <span className="text-[9px] font-bold text-indigo-300 uppercase">
-                    Split 1/3
+                    Split 1/{activeMembers.length}
                   </span>
                 </div>
               </div>

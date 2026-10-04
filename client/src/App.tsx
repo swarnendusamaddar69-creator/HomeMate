@@ -39,6 +39,7 @@ import {
   getCurrentUser,
   setCurrentUser as persistCurrentUser,
   getAllHouseholds,
+  saveAllHouseholds,
 } from './utils/storage';
 import { Navbar } from './components/Navbar';
 import { VoiceCommandHud } from './components/VoiceCommandHud';
@@ -79,12 +80,58 @@ export function App() {
   const households = getAllHouseholds();
   const activeHousehold = households.find((h) => h.id === currentUser?.householdId) || null;
 
+  // Dynamic user-managed household members
+  const [householdMembers, setHouseholdMembers] = useState<string[]>(() => {
+    if (activeHousehold?.members && activeHousehold.members.length > 0) {
+      return activeHousehold.members;
+    }
+    return currentUser?.displayName ? [currentUser.displayName] : [];
+  });
+
+  useEffect(() => {
+    if (activeHousehold?.members && activeHousehold.members.length > 0) {
+      setHouseholdMembers(activeHousehold.members);
+    } else if (currentUser?.displayName) {
+      setHouseholdMembers([currentUser.displayName]);
+    } else {
+      setHouseholdMembers([]);
+    }
+  }, [currentUser, activeHousehold?.id]);
+
+  const handleAddMember = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || householdMembers.includes(trimmed)) return;
+    const updated = [...householdMembers, trimmed];
+    setHouseholdMembers(updated);
+
+    if (activeHousehold) {
+      const allH = getAllHouseholds();
+      const updatedH = allH.map((h) =>
+        h.id === activeHousehold.id ? { ...h, members: updated } : h
+      );
+      saveAllHouseholds(updatedH);
+    }
+  };
+
+  const handleDeleteMember = (name: string) => {
+    const updated = householdMembers.filter((m) => m !== name);
+    setHouseholdMembers(updated);
+
+    if (activeHousehold) {
+      const allH = getAllHouseholds();
+      const updatedH = allH.map((h) =>
+        h.id === activeHousehold.id ? { ...h, members: updated } : h
+      );
+      saveAllHouseholds(updatedH);
+    }
+  };
+
   // Helper to determine the active household identifier
   const getHouseholdKey = (user: UserAccount | null, mode: AppMode): string => {
     if (user?.householdId) return user.householdId;
     if (mode === 'elder') return 'elder_home';
-    if (mode === 'hostel') return 'flat_b302';
-    return 'sharma_family';
+    if (mode === 'hostel') return 'flat_home';
+    return 'family_household';
   };
 
   const activeHouseholdKey = getHouseholdKey(currentUser, currentMode);
@@ -436,12 +483,12 @@ export function App() {
     setHostelChores((prev) =>
       prev.map((c) => {
         if (c.id === id) {
-          const roommates = ['Rohan', 'Vikram', 'Ankit'];
-          const currentIndex = roommates.indexOf(c.assignee);
-          const nextIndex = (currentIndex + 1) % roommates.length;
+          const list = householdMembers.length > 0 ? householdMembers : [currentUser?.displayName || 'Me'];
+          const currentIndex = list.indexOf(c.assignee);
+          const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % list.length;
           return {
             ...c,
-            assignee: roommates[nextIndex],
+            assignee: list[nextIndex],
             skipCount: (c.skipCount || 0) + 1,
           };
         }
@@ -704,6 +751,7 @@ export function App() {
             onUpdateMedicineStatus={handleUpdateMedicineStatus}
             onDeleteMedicineToBuy={handleDeleteMedicineToBuy}
             currentUser={currentUser}
+            householdMembers={householdMembers}
           />
         )}
 
@@ -727,6 +775,9 @@ export function App() {
             onDeleteShoppingItem={handleDeleteShoppingItem}
             onAddShoppingItem={handleAddShoppingItem}
             onEditShoppingItem={handleEditShoppingItem}
+            householdMembers={householdMembers}
+            onAddMember={handleAddMember}
+            onDeleteMember={handleDeleteMember}
           />
         )}
 
@@ -745,6 +796,9 @@ export function App() {
             onAddFamilyChore={handleAddFamilyChore}
             onDeleteFamilyChore={handleDeleteFamilyChore}
             onRefreshFamilyChores={handleRefreshFamilyChores}
+            householdMembers={householdMembers}
+            onAddMember={handleAddMember}
+            onDeleteMember={handleDeleteMember}
           />
         )}
       </main>
