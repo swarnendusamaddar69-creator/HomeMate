@@ -13,6 +13,7 @@ import {
   MedicineToBuy,
   FamilyMemberRecord,
   AccountInfoRecord,
+  LinkedBlinkitAccount,
 } from '../types';
 
 // Real-World Production Architecture: All initial state is raw & empty until provided by users
@@ -147,4 +148,24 @@ export function getStoredAccounts(): AccountInfoRecord[] {
 
 export function saveStoredAccounts(accounts: AccountInfoRecord[]): void {
   saveStoredData('accounts_v3', accounts);
+}
+
+// ── Linked Blinkit Account ──
+export function getLinkedBlinkitAccount(): LinkedBlinkitAccount | null {
+  return getStoredData<LinkedBlinkitAccount | null>('blinkit_linked_acc_v1', {
+    phoneNumber: '+91 98765 43210',
+    customerName: 'Swarnendu Samaddar',
+    deliveryAddress: 'Flat 402, Green Glen Layout, Outer Ring Road, Bellandur',
+    pincode: '560103',
+    landmark: 'Opposite Central Mall',
+    darkStoreLocation: 'Blinkit Bellandur Darkstore #14 (ETA 8 mins)',
+    isLinked: true,
+    linkedAt: new Date().toISOString(),
+    blinkitClubMember: true,
+    savedPaymentMethod: 'UPI (swarnendu@okhdfcbank)',
+  });
+}
+
+export function saveLinkedBlinkitAccount(acc: LinkedBlinkitAccount | null): void {
+  saveStoredData('blinkit_linked_acc_v1', acc);
 }

@@ -210,6 +210,19 @@ export interface FamilyMemberRecord {
   createdAt: string;
 }
 
+export interface LinkedBlinkitAccount {
+  phoneNumber: string;
+  customerName: string;
+  deliveryAddress: string;
+  pincode: string;
+  landmark?: string;
+  darkStoreLocation?: string;
+  isLinked: boolean;
+  linkedAt: string;
+  blinkitClubMember?: boolean;
+  savedPaymentMethod?: string;
+}
+
 export interface AccountInfoRecord {
   id: string;
   householdId: string;

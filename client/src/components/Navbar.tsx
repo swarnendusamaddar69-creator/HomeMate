@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { AppMode, Language, BackendHealth, UserAccount, Household } from '../types';
+import { AppMode, Language, BackendHealth, UserAccount, Household, LinkedBlinkitAccount } from '../types';
+import { getLinkedBlinkitAccount, saveLinkedBlinkitAccount } from '../utils/storage';
+import { LinkBlinkitAccountModal } from './LinkBlinkitAccountModal';
 import {
   Globe,
   Sparkles,
@@ -18,6 +20,7 @@ import {
   Phone,
   Mail,
   ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { checkBackendHealth } from '../utils/api';
 import { translations } from '../utils/translations';
@@ -53,6 +56,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showBlinkitModal, setShowBlinkitModal] = useState(false);
+  const [blinkitAccount, setBlinkitAccount] = useState<LinkedBlinkitAccount | null>(() => getLinkedBlinkitAccount());
 
   const t = translations[language];
 
@@ -189,6 +194,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden lg:inline">Database</span>
             </button>
           )}
+
+          {/* Linked Blinkit Account Pill — Desktop */}
+          <button
+            onClick={() => setShowBlinkitModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-amber-300/80 bg-amber-50 hover:bg-amber-100 text-amber-950 text-xs font-bold transition-all shadow-2xs hover:scale-102 cursor-pointer"
+            title="Link and manage your Blinkit delivery profile"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+            <span className="hidden sm:inline">Blinkit:</span>
+            <span className="text-amber-800 font-extrabold">{blinkitAccount?.isLinked ? 'Linked ✓' : 'Link Acc'}</span>
+          </button>
 
           {/* Live Clock — lg+ */}
           <div className={`hidden lg:flex items-center gap-1 text-[11px] font-mono font-bold px-2.5 py-1.5 rounded-xl border ${
@@ -499,6 +515,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         </div>
       )}
+
+      {/* Link Blinkit Account Modal */}
+      <LinkBlinkitAccountModal
+        isOpen={showBlinkitModal}
+        onClose={() => setShowBlinkitModal(false)}
+        linkedAccount={blinkitAccount}
+        onSaveAccount={(acc) => {
+          setBlinkitAccount(acc);
+          saveLinkedBlinkitAccount(acc);
+        }}
+      />
     </header>
   );
 };
