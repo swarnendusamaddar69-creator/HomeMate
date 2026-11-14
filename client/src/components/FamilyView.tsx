@@ -227,14 +227,14 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => {
-                  setDirectCartPlatform('Zepto');
+                  setDirectCartPlatform('Blinkit');
                   setShowDirectCartModal(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
-                title="Directly Cart to Zepto or Blinkit"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-black transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer border border-amber-400/40"
+                title="Directly Cart to Blinkit Site"
               >
                 <Zap className="w-3.5 h-3.5 fill-white" />
-                <span>Auto-Cart to Zepto / Blinkit</span>
+                <span>Auto-Cart to Blinkit Site</span>
               </button>
 
               <button

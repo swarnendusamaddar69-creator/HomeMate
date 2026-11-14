@@ -426,24 +426,14 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => {
-              setCartModalPlatform('Zepto');
+              setCartModalPlatform('Blinkit');
               setShowDirectCartModal(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white border border-purple-400/40 text-xs font-black transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
-            title="Auto-Cart Kirana list directly to Zepto or Blinkit"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-500 hover:from-amber-500 hover:to-orange-500 text-white border border-amber-300/40 text-xs font-black transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
+            title="Auto-Cart Kirana list directly into Blinkit site"
           >
             <Zap className="w-3.5 h-3.5 fill-white" />
-            <span>Auto-Cart Kirana ({shoppingItems.filter((i) => i.status === 'pending').length})</span>
-          </button>
-
-          <button
-            onClick={() => openQuickCommerceSearch('Zepto', shoppingItems[0]?.title || 'milk')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
-            title="Open Zepto 10-Min Delivery"
-          >
-            <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
-            <span>Zepto ({t.zeptoEta})</span>
-            <ExternalLink className="w-3 h-3 text-purple-600" />
+            <span>Direct Blinkit Auto-Cart ({shoppingItems.filter((i) => i.status === 'pending').length})</span>
           </button>
 
           <button
@@ -454,6 +444,16 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
             <span>Blinkit ({t.blinkitEta})</span>
             <ExternalLink className="w-3 h-3 text-amber-700" />
+          </button>
+
+          <button
+            onClick={() => openQuickCommerceSearch('Zepto', shoppingItems[0]?.title || 'milk')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
+            title="Open Zepto 10-Min Delivery"
+          >
+            <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
+            <span>Zepto ({t.zeptoEta})</span>
+            <ExternalLink className="w-3 h-3 text-purple-600" />
           </button>
 
           <button

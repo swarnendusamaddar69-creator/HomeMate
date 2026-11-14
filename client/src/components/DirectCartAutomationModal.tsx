@@ -17,6 +17,10 @@ import {
   ShieldCheck,
   ChevronRight,
   AlertCircle,
+  Play,
+  Terminal,
+  Bookmark,
+  ExternalLink as OpenIcon,
 } from 'lucide-react';
 
 interface DirectCartAutomationModalProps {
@@ -45,7 +49,7 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
   items,
   onMarkAsCarted,
   language = 'en',
-  defaultPlatform = 'Zepto',
+  defaultPlatform = 'Blinkit',
 }) => {
   const [platform, setPlatform] = useState<'Zepto' | 'Blinkit'>(defaultPlatform);
   const [isAutomating, setIsAutomating] = useState(false);
@@ -54,6 +58,12 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
   const [activeStepText, setActiveStepText] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [markDoneSuccess, setMarkDoneSuccess] = useState(false);
+
+  // Blinkit In-Site Automation State
+  const [addedItemIds, setAddedItemIds] = useState<string[]>([]);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [showScriptGuide, setShowScriptGuide] = useState(false);
+  const [activeAutomationTab, setActiveAutomationTab] = useState<'fast_cart' | 'one_click_script'>('fast_cart');
 
   // If no items are pending, provide smart fallback essentials so user can experience automation
   const effectiveItems = items.length > 0 ? items : [
@@ -72,7 +82,7 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
 
     if (title.includes('milk') || title.includes('doodh')) {
       price = 28;
-      matchedSku = currentPlatform === 'Zepto' ? 'Amul Taaza Homogenised Milk' : 'Amul T-Special Buffalo Milk';
+      matchedSku = currentPlatform === 'Blinkit' ? 'Amul Taaza Toned Cow Milk' : 'Amul Taaza Homogenised Milk';
       weight = '500 ml';
     } else if (title.includes('salt') || title.includes('namak')) {
       price = 26;
@@ -80,7 +90,7 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
       weight = '1 kg';
     } else if (title.includes('onion') || title.includes('pyaz')) {
       price = 35;
-      matchedSku = currentPlatform === 'Zepto' ? 'Fresh Sambhar Onions' : 'Fresh Nashik Red Onions';
+      matchedSku = currentPlatform === 'Blinkit' ? 'Fresh Nashik Red Onions (Desi Pyaz)' : 'Fresh Sambhar Onions';
       weight = '1 kg';
     } else if (title.includes('atta') || title.includes('flour')) {
       price = 245;
@@ -150,9 +160,9 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
         clearInterval(interval);
         setProgress(100);
         setIsAutomating(false);
-        setActiveStepText(`All ${initial.length} items successfully carted to ${platform}!`);
+        setActiveStepText(`All ${initial.length} items successfully matched for ${platform}!`);
       }
-    }, 450);
+    }, 350);
   };
 
   useEffect(() => {
@@ -170,30 +180,100 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
   const finalPayable = totalAmount + deliveryFee + handlingFee;
   const etaMinutes = platform === 'Zepto' ? 10 : 8;
 
-  // Open the primary direct search / cart deep-link on Zepto or Blinkit
-  const handleOpenPlatformCart = () => {
-    const firstItem = cartedMatches[0]?.originalTitle || 'grocery';
+  // Generate JavaScript code for direct in-page execution on Blinkit
+  const generateBlinkitInPageScript = () => {
+    const skus = cartedMatches.map((m) => m.matchedSku);
+    return `(async function autoCartHomeMate() {
+  const items = ${JSON.stringify(skus)};
+  console.log('%c HomeMate Blinkit Cart Automator Starting...', 'background:#0c831f;color:#fff;font-size:14px;padding:6px;border-radius:6px;');
+
+  const hud = document.createElement('div');
+  hud.id = 'homemate-hud';
+  hud.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999999;background:#0c831f;color:#fff;padding:16px 20px;border-radius:18px;box-shadow:0 14px 40px rgba(0,0,0,0.4);font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:600;min-width:300px;border:2px solid #fff;';
+  hud.innerHTML = '<div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:900;"><span>⚡</span><span>HomeMate Auto-Cart</span></div><div id="hm-msg" style="margin-top:8px;font-size:12px;opacity:0.95;">Starting item carting...</div>';
+  document.body.appendChild(hud);
+
+  const updateMsg = (txt) => { const el = document.getElementById('hm-msg'); if (el) el.innerText = txt; };
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    updateMsg('Carting (' + (i + 1) + '/' + items.length + '): ' + item + '...');
+    const searchInput = document.querySelector('input[placeholder*="Search"], input[type="text"], input[type="search"]');
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.value = item;
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+      searchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    }
+    await new Promise(r => setTimeout(r, 1200));
+
+    const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+    const addBtn = btns.find(b => (b.textContent || '').trim().toUpperCase() === 'ADD');
+    if (addBtn) {
+      addBtn.click();
+      updateMsg('Added: ' + item + ' ✓');
+    }
+    await new Promise(r => setTimeout(r, 800));
+  }
+
+  updateMsg('🎉 All items carted! Redirecting to Blinkit checkout...');
+  await new Promise(r => setTimeout(r, 1200));
+  window.location.href = 'https://blinkit.com/cart';
+})();`;
+  };
+
+  const bookmarkletHref = `javascript:${encodeURIComponent(generateBlinkitInPageScript())}`;
+
+  // Launch Blinkit and Copy the Script
+  const handleLaunchBlinkitAutoScript = () => {
+    const script = generateBlinkitInPageScript();
+    navigator.clipboard.writeText(script);
+    setCopiedScript(true);
+    setShowScriptGuide(true);
+    window.open('https://blinkit.com', '_blank');
+    setTimeout(() => setCopiedScript(false), 4000);
+  };
+
+  // Open Direct Platform Checkout Cart
+  const handleOpenDirectCart = () => {
     let url = '';
     if (platform === 'Zepto') {
-      url = `https://www.zeptonow.com/search?q=${encodeURIComponent(firstItem)}`;
+      url = 'https://www.zeptonow.com/cart';
     } else {
-      url = `https://blinkit.com/s/?q=${encodeURIComponent(firstItem)}`;
+      url = 'https://blinkit.com/cart';
     }
     window.open(url, '_blank');
   };
 
-  // Open multi-item tabs for rapid review
-  const handleOpenAllItemDeepLinks = () => {
-    cartedMatches.slice(0, 4).forEach((match, index) => {
+  // Open single item directly in Blinkit/Zepto and mark as added
+  const handleAddSingleItemToPlatform = (item: CartedItemMatch) => {
+    const url =
+      platform === 'Blinkit'
+        ? `https://blinkit.com/s/?q=${encodeURIComponent(item.matchedSku)}`
+        : `https://www.zeptonow.com/search?q=${encodeURIComponent(item.matchedSku)}`;
+    window.open(url, '_blank');
+    setAddedItemIds((prev) => Array.from(new Set([...prev, item.id])));
+  };
+
+  // Auto-Launch all items in sequence + Go to Cart
+  const handleAutoLaunchAllItemsAndCart = () => {
+    cartedMatches.slice(0, 5).forEach((match, index) => {
       setTimeout(() => {
         const query = encodeURIComponent(match.matchedSku);
         const url =
-          platform === 'Zepto'
-            ? `https://www.zeptonow.com/search?q=${query}`
-            : `https://blinkit.com/s/?q=${query}`;
+          platform === 'Blinkit'
+            ? `https://blinkit.com/s/?q=${query}`
+            : `https://www.zeptonow.com/search?q=${query}`;
         window.open(url, '_blank');
+        setAddedItemIds((prev) => Array.from(new Set([...prev, match.id])));
       }, index * 250);
     });
+
+    // Also open the cart as the final tab
+    setTimeout(() => {
+      handleOpenDirectCart();
+    }, cartedMatches.length * 250 + 400);
   };
 
   // Copy formatted manifest
@@ -226,9 +306,9 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
       <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Top Header */}
         <div className={`p-5 sm:p-6 text-white relative transition-all duration-300 ${
-          platform === 'Zepto'
-            ? 'bg-gradient-to-r from-purple-900 via-purple-700 to-indigo-800'
-            : 'bg-gradient-to-r from-amber-700 via-amber-600 to-orange-700'
+          platform === 'Blinkit'
+            ? 'bg-gradient-to-r from-amber-700 via-amber-600 to-orange-700'
+            : 'bg-gradient-to-r from-purple-900 via-purple-700 to-indigo-800'
         }`}>
           <button
             onClick={onClose}
@@ -242,19 +322,30 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
               <Zap className="w-4 h-4 fill-white" />
             </span>
             <span className="text-xs font-black tracking-wider uppercase bg-white/20 px-2.5 py-0.5 rounded-full border border-white/20">
-              Direct Quick-Commerce Automation
+              Direct Site Cart Automation
             </span>
           </div>
 
           <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-            Kirana List to {platform} Direct Cart
+            Direct Carting into {platform} Site
           </h2>
           <p className="text-xs text-white/80 mt-1 max-w-lg">
-            Automatically maps your household Kirana list items, matches live inventory SKUs, and prepares your cart for 8-10 minute doorstep delivery.
+            Automates adding your Kirana items directly into your real {platform} basket with 1-click execution and takes you straight to the checkout page.
           </p>
 
           {/* Platform Switcher */}
           <div className="mt-4 flex items-center gap-2 bg-black/20 p-1 rounded-2xl w-fit border border-white/10">
+            <button
+              onClick={() => setPlatform('Blinkit')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                platform === 'Blinkit'
+                  ? 'bg-amber-500 text-white shadow-md'
+                  : 'text-white/70 hover:text-white'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-yellow-200" />
+              <span>Blinkit (8-Min Direct Site)</span>
+            </button>
             <button
               onClick={() => setPlatform('Zepto')}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
@@ -266,25 +357,14 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
               <span className="w-2 h-2 rounded-full bg-purple-300" />
               <span>Zepto (10-Min)</span>
             </button>
-            <button
-              onClick={() => setPlatform('Blinkit')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                platform === 'Blinkit'
-                  ? 'bg-amber-500 text-white shadow-md'
-                  : 'text-white/70 hover:text-white'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-yellow-200" />
-              <span>Blinkit (8-Min)</span>
-            </button>
           </div>
         </div>
 
         {/* Progress & Status Bar */}
-        <div className="px-5 sm:px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+        <div className="px-5 sm:px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 font-bold text-slate-700">
             {isAutomating ? (
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-ping" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
             ) : (
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             )}
@@ -295,7 +375,7 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
             <div className="w-24 sm:w-32 bg-slate-200 h-2 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
-                  platform === 'Zepto' ? 'bg-purple-600' : 'bg-amber-500'
+                  platform === 'Blinkit' ? 'bg-amber-500' : 'bg-purple-600'
                 }`}
                 style={{ width: `${progress}%` }}
               />
@@ -304,51 +384,158 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
           </div>
         </div>
 
+        {/* Blinkit In-Site Direct Automation Engine Controller */}
+        {platform === 'Blinkit' && (
+          <div className="px-5 sm:px-6 pt-4 pb-1">
+            <div className="p-4 rounded-3xl bg-amber-50/80 border-2 border-amber-300 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-xl bg-amber-500 text-white">
+                    <Zap className="w-4 h-4 fill-white" />
+                  </span>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-black text-amber-950">
+                      Blinkit In-Site Direct Automation Engine
+                    </h4>
+                    <p className="text-[11px] text-amber-800">
+                      Directly add items and checkout right on the official <span className="font-bold">blinkit.com</span> site.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 bg-amber-200/60 p-1 rounded-xl text-[11px] font-bold">
+                  <button
+                    onClick={() => setActiveAutomationTab('fast_cart')}
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      activeAutomationTab === 'fast_cart' ? 'bg-amber-600 text-white shadow-xs' : 'text-amber-900'
+                    }`}
+                  >
+                    1-Tap Carting
+                  </button>
+                  <button
+                    onClick={() => setActiveAutomationTab('one_click_script')}
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      activeAutomationTab === 'one_click_script' ? 'bg-amber-600 text-white shadow-xs' : 'text-amber-900'
+                    }`}
+                  >
+                    Auto-Script (F12)
+                  </button>
+                </div>
+              </div>
+
+              {activeAutomationTab === 'fast_cart' ? (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1 border-t border-amber-200/70">
+                  <div className="text-xs text-amber-900">
+                    <span className="font-bold">Fast In-Site Carting:</span> Click <strong>"Auto-Launch All Items"</strong> to open items on Blinkit, or tap <strong>"+ Add on Blinkit"</strong> row-by-row below!
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleAutoLaunchAllItemsAndCart}
+                      className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>Auto-Launch All ({cartedMatches.length})</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2.5 pt-1 border-t border-amber-200/70 text-xs">
+                  <p className="text-amber-900 leading-snug">
+                    Run the automated HomeMate carting HUD directly inside <strong>blinkit.com</strong> to click "ADD" on all items automatically:
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleLaunchBlinkitAutoScript}
+                      className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                      <span>{copiedScript ? 'Script Copied! Opening Blinkit...' : 'Launch Blinkit & Copy Auto-Script'}</span>
+                    </button>
+
+                    <a
+                      href={bookmarkletHref}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigator.clipboard.writeText(generateBlinkitInPageScript());
+                        setCopiedScript(true);
+                        setTimeout(() => setCopiedScript(false), 3000);
+                        alert('Bookmarklet code copied! Drag this link to your browser bookmarks bar to click whenever you are on blinkit.com.');
+                      }}
+                      className="px-3 py-2 rounded-xl border border-amber-400 bg-white hover:bg-amber-100 text-amber-900 font-bold text-xs transition-all cursor-move flex items-center gap-1.5"
+                      title="Drag to bookmarks bar"
+                    >
+                      <Bookmark className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Drag to Bookmarks: "Blinkit Auto-Cart"</span>
+                    </a>
+                  </div>
+
+                  {showScriptGuide && (
+                    <div className="p-3 rounded-2xl bg-white border border-amber-300 text-slate-700 text-[11px] space-y-1 animate-fadeIn">
+                      <div className="font-bold text-amber-900 flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Script Copied to Clipboard! How to run on Blinkit:</span>
+                      </div>
+                      <ol className="list-decimal list-inside space-y-0.5 text-slate-600 pl-1 font-medium">
+                        <li>In the newly opened Blinkit tab, press <strong>F12</strong> (or Right Click ➔ Inspect).</li>
+                        <li>Switch to the <strong>Console</strong> tab.</li>
+                        <li>Paste (<strong>Ctrl + V</strong>) and press <strong>Enter</strong>.</li>
+                        <li>The HomeMate HUD will automatically add each item and take you directly to the cart checkout!</li>
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Cart Items List */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1">
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-3.5 flex-1">
           <div className="flex items-center justify-between">
             <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5">
-              <ShoppingBag className="w-4 h-4 text-purple-600" />
-              <span>Mapped Cart Items ({cartedMatches.length})</span>
+              <ShoppingBag className="w-4 h-4 text-amber-600" />
+              <span>Mapped Kirana Items ({cartedMatches.length})</span>
             </h3>
 
-            <button
-              onClick={startAutomation}
-              disabled={isAutomating}
-              className="text-xs font-bold text-slate-500 hover:text-purple-600 flex items-center gap-1 cursor-pointer transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Re-run Match</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-500">
+                {addedItemIds.length}/{cartedMatches.length} carted
+              </span>
+              <button
+                onClick={startAutomation}
+                disabled={isAutomating}
+                className="text-xs font-bold text-slate-500 hover:text-amber-600 flex items-center gap-1 cursor-pointer transition-colors ml-1"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2.5">
             {cartedMatches.map((item, index) => {
-              const isCarted = item.status === 'carted';
-              const isMatching = item.status === 'matching';
+              const isItemAdded = addedItemIds.includes(item.id);
 
               return (
                 <div
                   key={item.id}
                   className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 text-xs ${
-                    isCarted
-                      ? 'bg-purple-50/50 border-purple-200/80 shadow-xs'
-                      : isMatching
-                      ? 'bg-amber-50/60 border-amber-300 animate-pulse'
-                      : 'bg-white border-slate-200 opacity-60'
+                    isItemAdded
+                      ? 'bg-emerald-50/70 border-emerald-300 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-amber-300'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
                       className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isCarted
+                        isItemAdded
                           ? 'bg-emerald-600 text-white'
-                          : isMatching
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-slate-200 text-slate-600'
+                          : 'bg-amber-100 text-amber-900'
                       }`}
                     >
-                      {isCarted ? <Check className="w-4 h-4 stroke-[3]" /> : index + 1}
+                      {isItemAdded ? <Check className="w-4 h-4 stroke-[3]" /> : index + 1}
                     </div>
 
                     <div className="min-w-0">
@@ -359,27 +546,39 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
                         <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 shrink-0">
                           {item.weight}
                         </span>
+                        {isItemAdded && (
+                          <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                            Carted ✓
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-500 truncate">
-                        Matched from Kirana note: <span className="italic font-medium">"{item.originalTitle}"</span>
+                        Kirana list: <span className="italic font-medium">"{item.originalTitle}"</span> • Est. ₹{item.price}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-black text-slate-900 text-xs">₹{item.price}</span>
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => {
-                        const url =
-                          platform === 'Zepto'
-                            ? `https://www.zeptonow.com/search?q=${encodeURIComponent(item.matchedSku)}`
-                            : `https://blinkit.com/s/?q=${encodeURIComponent(item.matchedSku)}`;
-                        window.open(url, '_blank');
-                      }}
-                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-purple-600 transition-colors cursor-pointer"
-                      title={`Search on ${platform}`}
+                      onClick={() => handleAddSingleItemToPlatform(item)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1 ${
+                        isItemAdded
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300'
+                      }`}
+                      title={`Open and add on ${platform}`}
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      {isItemAdded ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Added ✓</span>
+                        </>
+                      ) : (
+                        <>
+                          <OpenIcon className="w-3.5 h-3.5 text-amber-600" />
+                          <span>+ Add on {platform}</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -410,10 +609,10 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
             </div>
             <div className="border-t border-slate-200 pt-2 flex items-center justify-between font-black text-sm text-slate-900">
               <span className="flex items-center gap-1.5">
-                <Truck className="w-4 h-4 text-purple-600" />
-                <span>Estimated Doorstep Payable:</span>
+                <Truck className="w-4 h-4 text-amber-600" />
+                <span>Estimated Doorstep Payable on {platform}:</span>
               </span>
-              <span className="text-base text-purple-700">₹{finalPayable}</span>
+              <span className="text-base text-amber-700">₹{finalPayable}</span>
             </div>
           </div>
         </div>
@@ -430,17 +629,6 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
               <span>{isCopied ? 'Manifest Copied!' : 'Copy Manifest'}</span>
             </button>
 
-            <button
-              onClick={handleOpenAllItemDeepLinks}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-              title="Open Items in Tabs"
-            >
-              <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-              <span>Open All Tabs</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
             {onMarkAsCarted && (
               <button
                 onClick={handleMarkAsDoneInKirana}
@@ -451,16 +639,18 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
                 <span>{markDoneSuccess ? 'Marked in Kirana! ✓' : 'Mark as Carted'}</span>
               </button>
             )}
+          </div>
 
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
-              onClick={handleOpenPlatformCart}
-              className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-white font-black text-xs transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2 ${
-                platform === 'Zepto'
-                  ? 'bg-purple-700 hover:bg-purple-800 shadow-purple-900/20'
-                  : 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/20'
+              onClick={handleOpenDirectCart}
+              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-white font-black text-xs transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2 ${
+                platform === 'Blinkit'
+                  ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/20'
+                  : 'bg-purple-700 hover:bg-purple-800 shadow-purple-900/20'
               }`}
             >
-              <span>Direct Checkout on {platform}</span>
+              <span>Go to {platform} Cart & Checkout (Direct Cart Page)</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
