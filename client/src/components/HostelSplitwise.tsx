@@ -203,7 +203,7 @@ export const HostelSplitwise: React.FC<HostelSplitwiseProps> = ({
             <form onSubmit={handleAddFlatmateSubmit} className="flex items-center gap-1">
               <input
                 type="text"
-                placeholder="Flatmate name..."
+                placeholder="e.g. Rahul, Sneha..."
                 value={newFlatmateName}
                 onChange={(e) => setNewFlatmateName(e.target.value)}
                 className="px-3 py-1.5 rounded-xl border border-indigo-300 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36"

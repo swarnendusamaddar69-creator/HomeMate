@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "familyMembers": [
+    {
+      "id": "mem_1",
+      "householdId": "family_household",
+      "name": "Ramesh Sharma",
+      "relationship": "Grandparent (Dada ji)",
+      "email": "ramesh.sharma@homemate.ai",
+      "phone": "+91 98301 22344",
+      "accountNumber": "••••••••4812",
+      "upiId": "ramesh.sharma@okhdfcbank",
+      "bankName": "HDFC Bank",
+      "emergencyContact": true,
+      "notes": "Blood pressure medicine at 8:30 AM and 8:30 PM. Needs low sodium diet.",
+      "createdAt": "2026-11-14T15:35:05.178Z"
+    },
+    {
+      "id": "mem_2",
+      "householdId": "family_household",
+      "name": "Pooja Sharma",
+      "relationship": "Mother",
+      "email": "pooja.sharma@homemate.ai",
+      "phone": "+91 98302 33455",
+      "accountNumber": "••••••••9104",
+      "upiId": "pooja.s@icici",
+      "bankName": "ICICI Bank",
+      "emergencyContact": true,
+      "notes": "Oversees pantry restock and weekly Kirana orders.",
+      "createdAt": "2026-11-14T15:35:05.181Z"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "acc_1",
+      "householdId": "family_household",
+      "accountHolder": "Ramesh Sharma",
+      "accountType": "upi",
+      "accountNumberOrId": "ramesh.sharma@okhdfcbank",
+      "bankOrProvider": "HDFC Bank (UPI)",
+      "isPrimary": true,
+      "notes": "Primary household grocery & medical reimbursement account",
+      "createdAt": "2026-11-14T15:35:05.181Z"
+    },
+    {
+      "id": "acc_2",
+      "householdId": "family_household",
+      "accountHolder": "Pooja Sharma",
+      "accountType": "bank",
+      "accountNumberOrId": "50100492819412",
+      "bankOrProvider": "ICICI Bank (Savings)",
+      "ifscOrHandle": "ICIC0000104",
+      "isPrimary": false,
+      "notes": "Utility bills & maintenance account",
+      "createdAt": "2026-11-14T15:35:05.181Z"
+    }
+  ],
+  "updatedAt": "2026-11-14T16:14:05.534Z",
+  "bills": [
+    {
+      "householdId": "test_hh",
+      "title": "Electricity Bill (BESCOM)",
+      "category": "electricity",
+      "amount": 1420,
+      "dueDay": 10,
+      "autoReminder": true,
+      "addedBy": "Admin",
+      "id": "bill_1794672845518_p7kx",
+      "dueDate": "2026-11-10",
+      "status": "paid",
+      "createdAt": "2026-11-14T16:14:05.518Z",
+      "paidDate": "2026-11-14T16:14:05.526Z",
+      "transactionRef": "TXN1794672845526"
+    }
+  ],
+  "khataEntries": [
+    {
+      "householdId": "test_hh",
+      "partyName": "Sharma Dairy Milkman",
+      "partyType": "milkman",
+      "amount": 900,
+      "type": "i_owe",
+      "description": "30 days cow milk supply",
+      "recordedBy": "Admin",
+      "id": "khata_1794672845528_65bw",
+      "settled": true,
+      "createdAt": "2026-11-14T16:14:05.528Z",
+      "settledDate": "2026-11-14T16:14:05.534Z"
+    }
+  ]
+}

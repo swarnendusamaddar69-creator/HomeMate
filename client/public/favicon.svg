@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="50%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#0d9488" />
+    </linearGradient>
+    <linearGradient id="roofGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#d1fae5" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#047857" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Rounded App Icon Background -->
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bgGrad)" filter="url(#shadow)" />
+
+  <!-- Modern House Outline -->
+  <path d="M64 26 L28 56 L36 63 L42 58 L42 96 C42 99.3 44.7 102 48 102 L80 102 C83.3 102 86 99.3 86 96 L86 58 L92 63 L100 56 Z" fill="url(#roofGrad)" />
+
+  <!-- Front Door / Archway -->
+  <path d="M54 102 L54 74 C54 68.5 58.5 64 64 64 C69.5 64 74 68.5 74 74 L74 102 Z" fill="#047857" opacity="0.9" />
+
+  <!-- AI Pulse Star / Sparkle in top right of house -->
+  <path d="M88 34 Q88 42 96 42 Q88 42 88 50 Q88 42 80 42 Q88 42 88 34 Z" fill="#fef08a" />
+  <circle cx="88" cy="42" r="2" fill="#ffffff" />
+</svg>

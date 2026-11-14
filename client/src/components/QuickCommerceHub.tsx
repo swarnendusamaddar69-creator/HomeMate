@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ShoppingItem, AppMode, Language } from '../types';
 import { translations } from '../utils/translations';
+import { DirectCartAutomationModal } from './DirectCartAutomationModal';
 import {
   Zap,
   ShoppingBag,
@@ -21,6 +22,7 @@ interface QuickCommerceHubProps {
   accentColor?: 'emerald' | 'indigo' | 'amber' | 'purple';
   currentMode?: AppMode;
   language?: Language;
+  onMarkAsBought?: (itemIds: string[]) => void;
 }
 
 export interface RecommendedProduct {
@@ -341,11 +343,14 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
   onAddItem,
   currentMode = 'family',
   language = 'en',
+  onMarkAsBought,
 }) => {
   const [addedItemIds, setAddedItemIds] = useState<string[]>([]);
   const [selectedPlatform, setSelectedPlatform] = useState<'All' | 'Zepto' | 'Blinkit' | 'Instamart'>('All');
   const [activeTabMode, setActiveTabMode] = useState<AppMode | 'all'>(currentMode || 'all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDirectCartModal, setShowDirectCartModal] = useState(false);
+  const [cartModalPlatform, setCartModalPlatform] = useState<'Zepto' | 'Blinkit'>('Zepto');
 
   const t = translations[language];
 
@@ -417,8 +422,20 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
           </p>
         </div>
 
-        {/* 1-Tap Direct Store Launchers */}
+        {/* 1-Tap Direct Store Launchers & Direct Cart Automation */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setCartModalPlatform('Zepto');
+              setShowDirectCartModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white border border-purple-400/40 text-xs font-black transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
+            title="Auto-Cart Kirana list directly to Zepto or Blinkit"
+          >
+            <Zap className="w-3.5 h-3.5 fill-white" />
+            <span>Auto-Cart Kirana ({shoppingItems.filter((i) => i.status === 'pending').length})</span>
+          </button>
+
           <button
             onClick={() => openQuickCommerceSearch('Zepto', shoppingItems[0]?.title || 'milk')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
@@ -490,6 +507,49 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
             <p className="text-[11px] text-emerald-800 mt-0.5">Avg Basket: ₹135 • Zero delivery charges</p>
           </div>
           <Store className="w-5 h-5 text-emerald-600 shrink-0" />
+        </div>
+      </div>
+
+      {/* 2.5 Kirana Direct Cart Automation Banner */}
+      <div className="p-4 rounded-3xl bg-gradient-to-r from-purple-900/10 via-indigo-900/10 to-amber-900/10 border border-purple-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-amber-500 text-white flex items-center justify-center shrink-0 shadow-md">
+            <Zap className="w-5 h-5 fill-white" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                Direct Kirana-to-Cart Automation Engine
+              </h4>
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                8-10 Min Delivery
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Instantly push your household Kirana list directly into a Zepto or Blinkit basket with SKU matching.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => {
+              setCartModalPlatform('Zepto');
+              setShowDirectCartModal(true);
+            }}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black transition-all shadow-xs active:scale-95 cursor-pointer"
+          >
+            <span>Auto-Cart Zepto</span>
+          </button>
+          <button
+            onClick={() => {
+              setCartModalPlatform('Blinkit');
+              setShowDirectCartModal(true);
+            }}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition-all shadow-xs active:scale-95 cursor-pointer"
+          >
+            <span>Auto-Cart Blinkit</span>
+          </button>
         </div>
       </div>
 
@@ -675,6 +735,15 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
           );
         })}
       </div>
+
+      <DirectCartAutomationModal
+        isOpen={showDirectCartModal}
+        onClose={() => setShowDirectCartModal(false)}
+        items={shoppingItems.filter((i) => i.status === 'pending')}
+        onMarkAsCarted={onMarkAsBought}
+        language={language}
+        defaultPlatform={cartModalPlatform}
+      />
     </div>
   );
 };

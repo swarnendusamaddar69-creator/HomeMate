@@ -7,6 +7,17 @@ import {
   LogOut,
   Copy,
   Check,
+  Menu,
+  X,
+  Database,
+  Home,
+  Heart,
+  GraduationCap,
+  Users,
+  Compass,
+  Phone,
+  Mail,
+  ShieldCheck,
 } from 'lucide-react';
 import { checkBackendHealth } from '../utils/api';
 import { translations } from '../utils/translations';
@@ -19,6 +30,10 @@ interface NavbarProps {
   language: Language;
   onLanguageChange: (lang: Language) => void;
   onOpenWidgetSuggestions: () => void;
+  onOpenDatabase?: () => void;
+  onOpenEmptyState?: () => void;
+  onOpen404?: () => void;
+  onSelectMode?: (mode: AppMode) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,10 +44,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   language,
   onLanguageChange,
   onOpenWidgetSuggestions,
+  onOpenDatabase,
+  onOpenEmptyState,
+  onOpen404,
+  onSelectMode,
 }) => {
   const [timeStr, setTimeStr] = useState<string>('');
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const t = translations[language];
 
@@ -93,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   );
 
   return (
-    <header className={`sticky top-0 z-40 backdrop-blur-xl border-b shadow-sm transition-all duration-300 ${headerBg}`}>
+    <header className={`sticky top-0 z-40 backdrop-blur-xl border-b shadow-xs transition-all duration-300 ${headerBg}`}>
       <div className="max-w-7xl mx-auto px-3 sm:px-5 h-14 sm:h-16 flex items-center justify-between gap-3">
 
         {/* LEFT — Brand & Household identity */}
@@ -116,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* RIGHT — Controls & Profile */}
+        {/* RIGHT — Controls & Profile (Desktop) */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
 
           {/* User profile chip */}
@@ -139,7 +159,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {household?.accessCode && currentMode !== 'elder' && (
               <button
                 onClick={handleCopyCode}
-                title="Copy access code"
+                title="Copy household access code"
                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg border font-mono text-[10px] font-bold cursor-pointer transition-colors ${
                   isHostel
                     ? 'bg-slate-700 border-indigo-700 text-indigo-300 hover:text-white'
@@ -153,6 +173,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
+
+          {/* Database Modal Button — Desktop */}
+          {onOpenDatabase && (
+            <button
+              onClick={onOpenDatabase}
+              title="Family Members & Accounts Database"
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                isHostel
+                  ? 'bg-indigo-900/40 hover:bg-indigo-800/50 border-indigo-700/40 text-indigo-300'
+                  : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Database</span>
+            </button>
+          )}
 
           {/* Live Clock — lg+ */}
           <div className={`hidden lg:flex items-center gap-1 text-[11px] font-mono font-bold px-2.5 py-1.5 rounded-xl border ${
@@ -170,12 +206,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${backendHealth ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
-            <span>{backendHealth ? 'Live' : 'Ready'}</span>
+            <span>{backendHealth ? 'Database Live' : 'Ready'}</span>
           </div>
 
           {/* Widget suggestions modal button — sm+ */}
           <button
             onClick={onOpenWidgetSuggestions}
+            title="Widgets & System Tools"
             className={`hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
               isHostel
                 ? 'bg-indigo-900/50 hover:bg-indigo-800/60 border-indigo-700/50 text-indigo-300'
@@ -186,8 +223,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden lg:inline">{t.widgets}</span>
           </button>
 
-          {/* Language selector */}
-          <div className={`flex items-center gap-1 px-2 py-1.5 rounded-xl border text-xs font-bold ${
+          {/* Language selector — Desktop */}
+          <div className={`hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-xl border text-xs font-bold ${
             isHostel ? 'bg-white/8 border-white/12 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
           }`}>
             <Globe className="w-3.5 h-3.5 opacity-70" />
@@ -202,21 +239,266 @@ export const Navbar: React.FC<NavbarProps> = ({
             </select>
           </div>
 
-          {/* Switch Account / Logout button */}
+          {/* Switch Account / Logout button — Desktop */}
           <button
             onClick={onLogout}
             title="Switch account / Logout"
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
               isHostel
                 ? 'bg-slate-800 hover:bg-slate-700 border-indigo-800/60 text-slate-300'
                 : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
             }`}
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t.switchAccount}</span>
+            <span className="hidden md:inline">{t.switchAccount}</span>
           </button>
+
+          {/* MOBILE MENU TOGGLE BUTTON (Feather-light hamburger) */}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            className={`sm:hidden p-2 rounded-xl border transition-colors cursor-pointer flex items-center justify-center min-h-[44px] min-w-[44px] ${
+              isHostel
+                ? 'bg-slate-800/80 border-indigo-700/60 text-slate-200'
+                : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
+            {isMobileMenuOpen ? (
+              <X className="w-5 h-5 text-rose-500" />
+            ) : (
+              <Menu className="w-5 h-5" />
+            )}
+          </button>
+
         </div>
       </div>
+
+      {/* MOBILE DROPDOWN / DRAWER MENU */}
+      {isMobileMenuOpen && (
+        <div
+          className={`sm:hidden border-b px-4 py-4 space-y-4 animate-fadeIn shadow-2xl ${
+            isHostel
+              ? 'bg-slate-950 border-indigo-900 text-white'
+              : 'bg-white border-slate-200 text-slate-900'
+          }`}
+        >
+          {/* Active User Card on Mobile */}
+          <div
+            className={`p-3 rounded-2xl border flex items-center justify-between ${
+              isHostel
+                ? 'bg-slate-900 border-indigo-800'
+                : 'bg-slate-50 border-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">
+                {currentMode === 'elder' ? '🧓' : currentMode === 'hostel' ? '🎓' : '👨‍👩‍👦'}
+              </span>
+              <div>
+                <div className="font-extrabold text-sm">{displayName}</div>
+                <div className="text-[11px] text-slate-500">{householdName}</div>
+              </div>
+            </div>
+
+            {household?.accessCode && (
+              <button
+                onClick={handleCopyCode}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-mono font-bold cursor-pointer"
+              >
+                {copiedCode ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>{household.accessCode}</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Mode Switcher Tabs */}
+          {onSelectMode && (
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">
+                Switch Household Mode
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => {
+                    onSelectMode('family');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`p-2.5 rounded-xl text-xs font-extrabold border text-center transition-all cursor-pointer ${
+                    currentMode === 'family'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Users className="w-4 h-4 mx-auto mb-1" />
+                  <span>Family</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    onSelectMode('elder');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`p-2.5 rounded-xl text-xs font-extrabold border text-center transition-all cursor-pointer ${
+                    currentMode === 'elder'
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                      : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Heart className="w-4 h-4 mx-auto mb-1" />
+                  <span>Elder Care</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    onSelectMode('hostel');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`p-2.5 rounded-xl text-xs font-extrabold border text-center transition-all cursor-pointer ${
+                    currentMode === 'hostel'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <GraduationCap className="w-4 h-4 mx-auto mb-1" />
+                  <span>Hostel</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Actions List */}
+          <div className="space-y-1.5 pt-1">
+            {onOpenDatabase && (
+              <button
+                onClick={() => {
+                  onOpenDatabase();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span>Family & Account Database</span>
+                </div>
+                <span className="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                  Open
+                </span>
+              </button>
+            )}
+
+            {onOpenEmptyState && (
+              <button
+                onClick={() => {
+                  onOpenEmptyState();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Home className="w-4 h-4 text-slate-600" />
+                  <span>Empty State / Starter View</span>
+                </div>
+                <span className="text-[10px] text-slate-500">&rarr;</span>
+              </button>
+            )}
+
+            {onOpen404 && (
+              <button
+                onClick={() => {
+                  onOpen404();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Compass className="w-4 h-4 text-slate-600" />
+                  <span>404 Error Page Preview</span>
+                </div>
+                <span className="text-[10px] text-slate-500">&rarr;</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                onOpenWidgetSuggestions();
+                setIsMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold cursor-pointer transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                <span>Widget Library & Add-ons</span>
+              </div>
+              <span className="text-[10px] text-indigo-600">&rarr;</span>
+            </button>
+          </div>
+
+          {/* Language Selector on Mobile */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs">
+            <span className="text-slate-500 font-bold flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-slate-500" />
+              <span>Language:</span>
+            </span>
+            <div className="flex gap-1.5">
+              {(['en', 'hi', 'bn'] as Language[]).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => onLanguageChange(lang)}
+                  className={`px-3 py-1 rounded-lg text-xs font-extrabold cursor-pointer transition-colors ${
+                    language === lang
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {lang.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Support Phone & Email in Mobile Drawer */}
+          <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
+            <a
+              href="tel:+918001234567"
+              className="text-emerald-700 font-bold hover:underline flex items-center gap-1"
+            >
+              <Phone className="w-3 h-3" />
+              <span>+91 800-123-4567</span>
+            </a>
+            <a
+              href="mailto:support@homemate.ai"
+              className="text-emerald-700 font-bold hover:underline flex items-center gap-1"
+            >
+              <Mail className="w-3 h-3" />
+              <span>support@homemate.ai</span>
+            </a>
+          </div>
+
+          {/* Logout / Switch Account on Mobile */}
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                onLogout();
+              }}
+              className="w-full py-2.5 px-4 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{t.switchAccount}</span>
+            </button>
+          </div>
+
+        </div>
+      )}
     </header>
   );
 };

@@ -193,3 +193,92 @@ export interface HouseholdEnvironment {
   condition: 'Sunny' | 'Pleasant' | 'Humid' | 'Cool';
   tips: string;
 }
+
+export interface FamilyMemberRecord {
+  id: string;
+  householdId: string;
+  name: string;
+  relationship: string;
+  email: string;
+  phone: string;
+  accountNumber?: string;
+  upiId?: string;
+  bankName?: string;
+  ifscCode?: string;
+  emergencyContact: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface AccountInfoRecord {
+  id: string;
+  householdId: string;
+  userId?: string;
+  accountHolder: string;
+  accountType: 'bank' | 'upi' | 'card' | 'wallet';
+  accountNumberOrId: string;
+  bankOrProvider: string;
+  ifscOrHandle?: string;
+  isPrimary: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface DatabaseStatus {
+  status: string;
+  engine: string;
+  databaseConfigured: boolean;
+  totalFamilyMembers: number;
+  totalAccounts: number;
+  totalBills?: number;
+  totalKhataEntries?: number;
+  filePath?: string | null;
+  lastSync: string;
+}
+
+export interface MonthlyBillRecord {
+  id: string;
+  householdId: string;
+  title: string;
+  category: 'rent' | 'electricity' | 'wifi' | 'gas' | 'salary' | 'maintenance' | 'water' | 'subscription' | 'medical' | 'groceries' | 'other';
+  amount: number;
+  dueDay: number; // 1 - 31
+  dueDate: string; // e.g. "2026-11-05"
+  status: 'pending' | 'due_soon' | 'overdue' | 'paid';
+  paidDate?: string;
+  paidVia?: string; // 'UPI' | 'Card' | 'Net Banking' | 'BBPS' | 'Cash'
+  transactionRef?: string;
+  billerAccount?: string;
+  autoReminder: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface KhataRecord {
+  id: string;
+  householdId: string;
+  partyName: string;
+  partyPhone?: string;
+  partyRole: 'kirana' | 'milkman' | 'subziwala' | 'domestic_help' | 'flatmate' | 'technician' | 'other';
+  type: 'gave' | 'got'; // 'gave' = Maine Diye / Debit (-₹), 'got' = Maine Liye / Credit (+₹)
+  amount: number;
+  description: string;
+  date: string;
+  settled: boolean;
+  settledDate?: string;
+  upiId?: string;
+  createdAt: string;
+}
+
+export interface PaymentGatewayResponse {
+  success: boolean;
+  status: string;
+  transactionId: string;
+  bankReferenceNumber: string;
+  billerName: string;
+  amountPaid: number;
+  paymentMethod: string;
+  paidAt: string;
+  receiptUrl: string;
+  message: string;
+}

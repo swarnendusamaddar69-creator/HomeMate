@@ -11,6 +11,8 @@ import {
   FamilyChore,
   Prescription,
   MedicineToBuy,
+  FamilyMemberRecord,
+  AccountInfoRecord,
 } from '../types';
 
 // Real-World Production Architecture: All initial state is raw & empty until provided by users
@@ -76,4 +78,73 @@ export function getCurrentUser(): UserAccount | null {
 
 export function setCurrentUser(user: UserAccount | null): void {
   saveStoredData('current_user_v3', user);
+}
+
+export function getStoredFamilyMembers(): FamilyMemberRecord[] {
+  return getStoredData<FamilyMemberRecord[]>('family_members_v3', [
+    {
+      id: 'mem_1',
+      householdId: 'family_household',
+      name: 'Ramesh Sharma',
+      relationship: 'Grandparent (Dada ji)',
+      email: 'ramesh.sharma@homemate.ai',
+      phone: '+91 98301 22344',
+      accountNumber: '••••••••4812',
+      upiId: 'ramesh.sharma@okhdfcbank',
+      bankName: 'HDFC Bank',
+      emergencyContact: true,
+      notes: 'Blood pressure medicine at 8:30 AM and 8:30 PM. Needs low sodium diet.',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'mem_2',
+      householdId: 'family_household',
+      name: 'Pooja Sharma',
+      relationship: 'Mother',
+      email: 'pooja.sharma@homemate.ai',
+      phone: '+91 98302 33455',
+      accountNumber: '••••••••9104',
+      upiId: 'pooja.s@icici',
+      bankName: 'ICICI Bank',
+      emergencyContact: true,
+      notes: 'Oversees pantry restock and weekly Kirana orders.',
+      createdAt: new Date().toISOString(),
+    },
+  ]);
+}
+
+export function saveStoredFamilyMembers(members: FamilyMemberRecord[]): void {
+  saveStoredData('family_members_v3', members);
+}
+
+export function getStoredAccounts(): AccountInfoRecord[] {
+  return getStoredData<AccountInfoRecord[]>('accounts_v3', [
+    {
+      id: 'acc_1',
+      householdId: 'family_household',
+      accountHolder: 'Ramesh Sharma',
+      accountType: 'upi',
+      accountNumberOrId: 'ramesh.sharma@okhdfcbank',
+      bankOrProvider: 'HDFC Bank (UPI)',
+      isPrimary: true,
+      notes: 'Primary household grocery & medical reimbursement account',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'acc_2',
+      householdId: 'family_household',
+      accountHolder: 'Pooja Sharma',
+      accountType: 'bank',
+      accountNumberOrId: '50100492819412',
+      bankOrProvider: 'ICICI Bank (Savings)',
+      ifscOrHandle: 'ICIC0000104',
+      isPrimary: false,
+      notes: 'Utility bills & maintenance account',
+      createdAt: new Date().toISOString(),
+    },
+  ]);
+}
+
+export function saveStoredAccounts(accounts: AccountInfoRecord[]): void {
+  saveStoredData('accounts_v3', accounts);
 }

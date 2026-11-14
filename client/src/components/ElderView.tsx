@@ -21,6 +21,8 @@ import {
   Zap,
   Edit3,
   Minus,
+  Phone,
+  Mail,
 } from 'lucide-react';
 import { exportKiranaWhatsApp } from '../utils/api';
 import {
@@ -395,6 +397,58 @@ export const ElderView: React.FC<ElderViewProps> = ({
                 <span>{t.familyNotified}</span>
               </div>
             )}
+          </div>
+        </div>
+      </section>
+
+      {/* 2.5 EMERGENCY SOS & FAMILY CARE HOTLINE */}
+      <section className="bg-gradient-to-r from-rose-50 via-red-50 to-amber-50 rounded-3xl border-2 border-rose-300 p-5 sm:p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-md shrink-0">
+              <Phone className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-slate-900 text-base sm:text-lg">
+                  {language === 'hi' ? 'आपातकालीन सहायता और हेल्पलाइन' : language === 'bn' ? 'জরুরি হেল্পলাইন ও পারিবারিক সহায়তা' : 'Emergency Assistance & Family Careline'}
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                  24/7 Live
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {language === 'hi'
+                  ? 'तुरंत परिवार या आपातकालीन डॉक्टर से बात करने के लिए नंबर पर टैप करें।'
+                  : language === 'bn'
+                  ? 'পরিবার বা জরুরি ডাক্তারের সাথে কথা বলতে সরাসরি ট্যাপ করুন।'
+                  : 'Tap any number below to instantly place a call to your family or emergency care.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            <a
+              href="tel:+918001234567"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-sm transition-all"
+            >
+              <Phone className="w-4 h-4" />
+              <span>Call Care Concierge (+91 800-123-4567)</span>
+            </a>
+            <a
+              href="tel:112"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 font-extrabold text-xs transition-all"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span>Emergency 112</span>
+            </a>
+            <a
+              href="mailto:support@homemate.ai"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 font-extrabold text-xs transition-all"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>support@homemate.ai</span>
+            </a>
           </div>
         </div>
       </section>
@@ -815,6 +869,7 @@ export const ElderView: React.FC<ElderViewProps> = ({
               onAddItem={onAddShoppingItem}
               currentMode="elder"
               language={language}
+              onMarkAsBought={(ids) => ids.forEach((id) => onToggleShoppingItem(id))}
             />
           </div>
         )}

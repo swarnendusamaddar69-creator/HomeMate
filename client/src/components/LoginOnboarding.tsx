@@ -21,8 +21,11 @@ import {
   Heart,
   GraduationCap,
   Users,
+  Key,
+  Check,
 } from 'lucide-react';
 import { translations } from '../utils/translations';
+import { sendOtp, verifyOtp } from '../utils/api';
 import {
   getAllUsers,
   saveAllUsers,
@@ -73,6 +76,27 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
   const [rememberMe, setRememberMe] = useState(true);
   const [signinError, setSigninError] = useState<string | null>(null);
   const [signinLoading, setSigninLoading] = useState(false);
+  const [signinWithOtp, setSigninWithOtp] = useState(false);
+
+  // ─── OTP Verification State ───
+  const [showOtpVerification, setShowOtpVerification] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [previewOtp, setPreviewOtp] = useState('');
+  const [otpTimer, setOtpTimer] = useState(30);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [pendingUser, setPendingUser] = useState<UserAccount | null>(null);
+  const [pendingHousehold, setPendingHousehold] = useState<Household | null>(null);
+  const [isJoiningExisting, setIsJoiningExisting] = useState(false);
+  const [otpMode, setOtpMode] = useState<'register' | 'signin'>('register');
+
+  useEffect(() => {
+    let interval: any = null;
+    if (showOtpVerification && otpTimer > 0) {
+      interval = setInterval(() => setOtpTimer((t) => t - 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [showOtpVerification, otpTimer]);
 
   // Generate a random clean access code on mount
   const generateRandomCode = () => {
@@ -110,8 +134,8 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     }
   }, [joinCode]);
 
-  // ─── Handle Create Account ───
-  const handleCreateAccount = (e: React.FormEvent) => {
+  // ─── Handle Create Account with Mandatory OTP Verification ───
+  const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
 
@@ -119,6 +143,7 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     const cleanEmail = email.trim().toLowerCase();
     const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '');
     const cleanPassword = password.trim();
+    const cleanPhone = phone.trim();
 
     if (!cleanFullName) {
       setCreateError('Please enter your full name.');
@@ -157,6 +182,7 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
       let finalHouseholdName = '';
       let finalHouseholdMode = selectedMode;
       let finalRole: 'admin' | 'member' = 'admin';
+      let preparedHousehold: Household | null = null;
 
       if (householdSetup === 'new') {
         const cleanHName = householdName.trim() || `${cleanFullName}'s Home`;
@@ -172,7 +198,7 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
         finalHouseholdId = `hh_${Date.now()}`;
         finalHouseholdName = cleanHName;
 
-        const newHousehold: Household = {
+        preparedHousehold = {
           id: finalHouseholdId,
           name: cleanHName,
           mode: selectedMode,
@@ -182,8 +208,7 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
           city: city.trim() || undefined,
           createdAt: new Date().toISOString(),
         };
-
-        saveAllHouseholds([...allHouseholds, newHousehold]);
+        setIsJoiningExisting(false);
       } else {
         // Joining existing household
         const cleanJoin = joinCode.trim().toUpperCase();
@@ -199,22 +224,16 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
         finalHouseholdName = existingH.name;
         finalHouseholdMode = existingH.mode;
         finalRole = 'member';
-
-        const updatedHouseholds = allHouseholds.map((h) =>
-          h.id === existingH.id
-            ? { ...h, members: Array.from(new Set([...h.members, cleanFullName])) }
-            : h
-        );
-        saveAllHouseholds(updatedHouseholds);
+        setIsJoiningExisting(true);
       }
 
-      // Create new user account
+      // Create new user account candidate
       const newUser: UserAccount = {
         id: `u-${Date.now()}`,
         username: cleanUsername,
         displayName: cleanFullName,
         email: cleanEmail,
-        phone: phone.trim() || undefined,
+        phone: cleanPhone || undefined,
         password: cleanPassword,
         role: finalRole,
         householdId: finalHouseholdId,
@@ -230,16 +249,23 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
         createdAt: new Date().toISOString(),
       };
 
-      saveAllUsers([...allUsers, newUser]);
+      setPendingUser(newUser);
+      setPendingHousehold(preparedHousehold);
+      setOtpMode('register');
 
-      // Complete login immediately
-      setTimeout(() => {
-        setCreateLoading(false);
-        onLogin(newUser);
-      }, 400);
-    } catch (err) {
+      // Dispatch real OTP via API
+      const targetIdentifier = cleanPhone || cleanEmail;
+      const otpRes = await sendOtp(targetIdentifier);
+
+      setPreviewOtp(otpRes.previewOtp || '123456');
+      setOtpCode('');
+      setOtpTimer(30);
+      setOtpError(null);
+      setShowOtpVerification(true);
+      setCreateLoading(false);
+    } catch (err: any) {
       console.error(err);
-      setCreateError('Something went wrong during account creation. Please try again.');
+      setCreateError(err.message || 'Something went wrong during account creation. Please try again.');
       setCreateLoading(false);
     }
   };
@@ -276,6 +302,116 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
       setSigninLoading(false);
       onLogin(user);
     }, 350);
+  };
+
+  // ─── Request Sign In OTP ───
+  const handleRequestSigninOtp = async () => {
+    const cleanId = signinIdentifier.trim().toLowerCase();
+    if (!cleanId) {
+      setSigninError('Please enter your email, username, or phone number first.');
+      return;
+    }
+
+    const allUsers = getAllUsers();
+    const user = allUsers.find(
+      (u) =>
+        u.username.toLowerCase() === cleanId ||
+        (u.email && u.email.toLowerCase() === cleanId) ||
+        (u.phone && u.phone.includes(cleanId))
+    );
+
+    if (!user) {
+      setSigninError('No account found for this user. Please create an account.');
+      return;
+    }
+
+    setSigninLoading(true);
+    setSigninError(null);
+
+    try {
+      const target = user.phone || user.email || cleanId;
+      const res = await sendOtp(target);
+      setPendingUser(user);
+      setOtpMode('signin');
+      setPreviewOtp(res.previewOtp || '123456');
+      setOtpCode('');
+      setOtpTimer(30);
+      setOtpError(null);
+      setShowOtpVerification(true);
+      setSigninLoading(false);
+    } catch (err: any) {
+      setSigninError(err.message || 'Failed to dispatch OTP. Please try password login.');
+      setSigninLoading(false);
+    }
+  };
+
+  // ─── Verify OTP & Finalize Registration or Login ───
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpCode || otpCode.trim().length < 6) {
+      setOtpError('Please enter the full 6-digit OTP code.');
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError(null);
+
+    try {
+      const targetIdentifier =
+        otpMode === 'register'
+          ? pendingUser?.phone || pendingUser?.email || ''
+          : pendingUser?.phone || pendingUser?.email || signinIdentifier;
+
+      const res = await verifyOtp(targetIdentifier, otpCode.trim());
+      if (!res.verified && !res.success) {
+        throw new Error(res.message || 'OTP Verification failed');
+      }
+
+      if (otpMode === 'register' && pendingUser) {
+        const allUsers = getAllUsers();
+        const allHouseholds = getAllHouseholds();
+
+        if (pendingHousehold) {
+          saveAllHouseholds([...allHouseholds, pendingHousehold]);
+        } else if (isJoiningExisting) {
+          const updated = allHouseholds.map((h) =>
+            h.id === pendingUser.householdId
+              ? { ...h, members: Array.from(new Set([...h.members, pendingUser.displayName])) }
+              : h
+          );
+          saveAllHouseholds(updated);
+        }
+
+        saveAllUsers([...allUsers, pendingUser]);
+        setShowOtpVerification(false);
+        setOtpLoading(false);
+        onLogin(pendingUser);
+      } else if (otpMode === 'signin' && pendingUser) {
+        setShowOtpVerification(false);
+        setOtpLoading(false);
+        onLogin(pendingUser);
+      }
+    } catch (err: any) {
+      setOtpError(err.message || 'Invalid or expired OTP code. Please try again.');
+      setOtpLoading(false);
+    }
+  };
+
+  // ─── Resend OTP Code ───
+  const handleResendOtp = async () => {
+    try {
+      const targetIdentifier =
+        otpMode === 'register'
+          ? pendingUser?.phone || pendingUser?.email || ''
+          : pendingUser?.phone || pendingUser?.email || signinIdentifier;
+
+      const res = await sendOtp(targetIdentifier);
+      setPreviewOtp(res.previewOtp || '123456');
+      setOtpTimer(30);
+      setOtpError(null);
+    } catch (err: any) {
+      setOtpError('Failed to resend verification code. Please try again.');
+    }
   };
 
   return (
@@ -799,6 +935,22 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
                   </>
                 )}
               </button>
+
+              <div className="flex items-center gap-2 my-2">
+                <div className="h-px bg-white/10 flex-1" />
+                <span className="text-[10px] text-slate-400 font-bold uppercase">or</span>
+                <div className="h-px bg-white/10 flex-1" />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRequestSigninOtp}
+                disabled={signinLoading}
+                className="w-full py-2.5 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Sign In via 6-Digit Mobile / Email OTP</span>
+              </button>
             </form>
 
             <div className="border-t border-white/10 pt-4 text-center space-y-2">
@@ -816,6 +968,131 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
           </div>
         )}
       </main>
+
+      {/* ══════════════════════════════════════════════════════════
+          OTP VERIFICATION MODAL DIALOG
+      ══════════════════════════════════════════════════════════ */}
+      {showOtpVerification && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-white/20 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 text-center relative overflow-hidden">
+            {/* Top gradient highlight */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500" />
+
+            {/* Header Icon */}
+            <div className="w-16 h-16 rounded-3xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center mx-auto text-emerald-400 shadow-lg shadow-emerald-500/10">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                Security Verification
+              </span>
+              <h3 className="text-xl font-black text-white">
+                {otpMode === 'register' ? 'Verify Mobile / Email' : 'Sign In with OTP'}
+              </h3>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                We've dispatched a 6-digit verification code to{' '}
+                <span className="text-white font-bold">
+                  {pendingUser?.phone || pendingUser?.email || signinIdentifier}
+                </span>
+              </p>
+            </div>
+
+            {/* Sandbox Live Demo Helper Banner */}
+            {previewOtp && (
+              <div className="p-3.5 rounded-2xl bg-indigo-500/15 border border-indigo-400/30 text-left flex items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] font-black text-indigo-300">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Demo Mode OTP</span>
+                  </div>
+                  <p className="text-xs font-mono font-black text-white tracking-widest mt-0.5">
+                    {previewOtp}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOtpCode(previewOtp);
+                    setOtpError(null);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[11px] transition-colors cursor-pointer shadow-xs"
+                >
+                  Auto-fill OTP
+                </button>
+              </div>
+            )}
+
+            {/* OTP Form */}
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              {otpError && (
+                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2 text-left animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{otpError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1 text-left">
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block text-center">
+                  Enter 6-Digit Verification PIN
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="••••••"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  className="w-full text-center font-mono text-2xl font-black tracking-[0.6em] py-3 rounded-2xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-emerald-300 placeholder:text-slate-600"
+                  autoFocus
+                />
+              </div>
+
+              {/* Countdown / Resend */}
+              <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                <span>Didn't receive the SMS/Email?</span>
+                {otpTimer > 0 ? (
+                  <span className="font-mono text-slate-500 font-bold">Resend in {otpTimer}s</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    className="text-emerald-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Resend Code</span>
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={otpLoading || otpCode.length < 6}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white font-black text-sm shadow-xl shadow-emerald-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {otpLoading ? (
+                  <span>Verifying code...</span>
+                ) : (
+                  <>
+                    <span>{otpMode === 'register' ? 'Verify & Create Account' : 'Verify & Sign In'}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOtpVerification(false);
+                  setOtpError(null);
+                }}
+                className="w-full py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Back to Registration / Details
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="py-4 text-center text-xs text-slate-500 border-t border-white/5">

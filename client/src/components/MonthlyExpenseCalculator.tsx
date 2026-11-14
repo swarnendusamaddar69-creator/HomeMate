@@ -1,41 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppMode,
   Language,
   ShoppingItem,
-  HostelChore,
-  FamilyChore,
-  HostelExpense,
   UserAccount,
+  MonthlyBillRecord,
+  PaymentGatewayResponse,
 } from '../types';
 import {
   IndianRupee,
   Receipt,
-  ShoppingCart,
-  CheckSquare,
   PieChart,
   Plus,
   Share2,
-  TrendingDown,
-  TrendingUp,
-  Users,
-  ShieldCheck,
   Calendar,
   Sparkles,
-  QrCode,
-  CheckCircle,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  CreditCard,
+  Building,
+  Zap,
+  Trash2,
+  Lock,
+  BookOpen,
+  ArrowRight,
+  ShieldCheck,
+  X,
 } from 'lucide-react';
+import {
+  fetchMonthlyBills,
+  createMonthlyBill,
+  payMonthlyBillApi,
+  deleteMonthlyBillApi,
+} from '../utils/api';
+import { BillPaymentGatewayModal } from './BillPaymentGatewayModal';
+import { HouseholdKhataModal } from './HouseholdKhataModal';
 import { translations } from '../utils/translations';
 
 interface MonthlyExpenseCalculatorProps {
   mode: AppMode;
   language: Language;
   shoppingItems: ShoppingItem[];
-  hostelChores?: HostelChore[];
-  familyChores?: FamilyChore[];
-  hostelExpenses?: HostelExpense[];
   currentUser: UserAccount | null;
   householdMembers?: string[];
+  familyChores?: any[];
+  hostelChores?: any[];
+  hostelExpenses?: any[];
   onTriggerUpiModal?: (
     title: string,
     amount: number,
@@ -45,193 +56,182 @@ interface MonthlyExpenseCalculatorProps {
   ) => void;
 }
 
-interface CustomExpense {
-  id: string;
-  title: string;
-  amount: number;
-  category: string;
-  date: string;
-  source: string;
-  paidBy?: string;
-}
-
 export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> = ({
   mode,
   language,
   shoppingItems,
-  hostelChores = [],
-  familyChores = [],
-  hostelExpenses = [],
   currentUser,
   householdMembers = [],
   onTriggerUpiModal,
 }) => {
   const t = translations[language];
+  const householdId = currentUser?.householdId || 'family_household';
 
-  const [customExpenses, setCustomExpenses] = useState<CustomExpense[]>(() => {
+  // Automated Monthly Bills & Reminders (Starting from scratch - pure user inputted)
+  const [bills, setBills] = useState<MonthlyBillRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Add Recurring Bill Form State
+  const [showAddBillModal, setShowAddBillModal] = useState(false);
+  const [billTitle, setBillTitle] = useState('');
+  const [billAmount, setBillAmount] = useState('');
+  const [billCategory, setBillCategory] = useState<MonthlyBillRecord['category']>('rent');
+  const [billDueDay, setBillDueDay] = useState(5);
+  const [billerAccount, setBillerAccount] = useState('');
+  const [billNotes, setBillNotes] = useState('');
+  const [autoReminder, setAutoReminder] = useState(true);
+
+  // Payment Gateway Modal State
+  const [payingBill, setPayingBill] = useState<MonthlyBillRecord | null>(null);
+
+  // Digital Khata Modal State
+  const [isKhataOpen, setIsKhataOpen] = useState(false);
+
+  // Feedback Toasts
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Load recurring bills from persistent database/backend
+  const loadBills = async () => {
+    setLoading(true);
     try {
-      const saved = localStorage.getItem(`homemate_custom_exp_${mode}`);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
+      const data = await fetchMonthlyBills(householdId);
+      setBills(data);
+    } catch (err) {
+      console.warn('Error fetching monthly bills:', err);
+    } finally {
+      setLoading(false);
     }
-  });
-
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newAmount, setNewAmount] = useState('');
-  const [newCategory, setNewCategory] = useState('groceries');
-  const [copiedReportToast, setCopiedReportToast] = useState(false);
-
-  // Helper to estimate price of grocery item if not specified
-  const estimateItemPrice = (item: ShoppingItem): number => {
-    const titleLower = item.title.toLowerCase();
-    const qtyMatch = (item.quantity || '1').match(/(\d+(?:\.\d+)?)/);
-    const count = qtyMatch ? parseFloat(qtyMatch[1]) || 1 : 1;
-
-    if (titleLower.includes('milk') || titleLower.includes('दूध') || titleLower.includes('দুধ')) return Math.round(count * 66);
-    if (titleLower.includes('egg') || titleLower.includes('अंडे') || titleLower.includes('ডিম')) return Math.round(count * 8);
-    if (titleLower.includes('tomato') || titleLower.includes('टमाटर') || titleLower.includes('টমেটো')) return Math.round(count * 42);
-    if (titleLower.includes('bread') || titleLower.includes('ब्रेड') || titleLower.includes('পাউরুটি')) return Math.round(count * 45);
-    if (titleLower.includes('butter') || titleLower.includes('मक्खन') || titleLower.includes('মাখন')) return Math.round(count * 58);
-    if (titleLower.includes('maggi') || titleLower.includes('नूडल्स') || titleLower.includes('ম্যাগি')) return Math.round(count * 14);
-    if (titleLower.includes('atta') || titleLower.includes('आटा') || titleLower.includes('আটা')) return Math.round(count * 45);
-    if (titleLower.includes('rice') || titleLower.includes('चावल') || titleLower.includes('চাল')) return Math.round(count * 65);
-    if (titleLower.includes('oil') || titleLower.includes('तेल') || titleLower.includes('তেল')) return Math.round(count * 145);
-    if (titleLower.includes('tea') || titleLower.includes('चाय') || titleLower.includes('চা')) return Math.round(count * 120);
-    if (titleLower.includes('biscuit') || titleLower.includes('बिस्कुट')) return Math.round(count * 30);
-    return Math.round(count * 55);
   };
 
-  // 1. Calculate Groceries / Orders spend (bought items + pending essentials)
-  const boughtItems = shoppingItems.filter((i) => i.status === 'bought');
-  const boughtTotal = boughtItems.reduce((acc, item) => acc + estimateItemPrice(item), 0);
-  const pendingItemsTotal = shoppingItems
-    .filter((i) => i.status === 'pending')
-    .reduce((acc, item) => acc + estimateItemPrice(item), 0);
+  useEffect(() => {
+    loadBills();
+  }, [householdId]);
 
-  // 2. Calculate Chores & Maintenance costs
-  let choreMaintenanceCost = 0;
-  let choreSourceLabel = '';
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
-  if (mode === 'hostel') {
-    // Samosa / Penalty fund from skipped chores (₹20 per skip) + maid / flat cleaning fee
-    const skipCount = hostelChores.reduce((acc, c) => acc + (c.skipCount || 0), 0);
-    const penaltyTotal = skipCount * 20 + 80;
-    const flatCleaning = 450; // shared deep cleaning fee
-    choreMaintenanceCost = penaltyTotal + flatCleaning;
-    choreSourceLabel = `Chore Penalty Jar (₹${penaltyTotal}) + Flat Cleaning (₹${flatCleaning})`;
-  } else if (mode === 'family') {
-    // Cleaning supplies + house upkeep tasks
-    const suppliesCost = 420;
-    const domesticHelp = 2500;
-    choreMaintenanceCost = suppliesCost + domesticHelp;
-    choreSourceLabel = `House Cleaning Help (₹${domesticHelp}) + Supplies & Repairs (₹${suppliesCost})`;
-  } else {
-    // Elder: Home assistance & domestic help
-    const homeAssistance = 1800;
-    const maintenance = 350;
-    choreMaintenanceCost = homeAssistance + maintenance;
-    choreSourceLabel = `Caregiver/Helper Support (₹${homeAssistance}) + Maintenance (₹${maintenance})`;
-  }
-
-  // 3. Baseline Utilities / Prescriptions / Rent / Mess
-  let baselineUtilities = 0;
-  let baselineLabel = '';
-
-  if (mode === 'hostel') {
-    const wifi = 943;
-    const waterPurifier = 450;
-    baselineUtilities = wifi + waterPurifier;
-    baselineLabel = `Wi-Fi Fiber (₹${wifi}) + RO Water Cans (₹${waterPurifier})`;
-  } else if (mode === 'family') {
-    const electricity = 1840;
-    const gasCylinder = 853;
-    const waterFilter = 450;
-    baselineUtilities = electricity + gasCylinder + waterFilter;
-    baselineLabel = `Electricity (₹${electricity}) + LPG Gas (₹${gasCylinder}) + RO (₹${waterFilter})`;
-  } else {
-    // Elder: Medicines & Health Routine
-    const medsCost = 1120;
-    const checkupDiagnostics = 650;
-    baselineUtilities = medsCost + checkupDiagnostics;
-    baselineLabel = `Monthly Prescriptions (₹${medsCost}) + Health Checkups (₹${checkupDiagnostics})`;
-  }
-
-  // 4. Custom Logged Expenses
-  const customTotal = customExpenses.reduce((sum, e) => sum + e.amount, 0);
-
-  // Total Monthly Expense
-  const totalMonthlySpend = boughtTotal + choreMaintenanceCost + baselineUtilities + customTotal;
-
-  // Budget Caps
-  const budgetCap = mode === 'elder' ? 8000 : mode === 'hostel' ? 6000 : 18000;
-  const percentUsed = Math.min(100, Math.round((totalMonthlySpend / budgetCap) * 100));
-
-  // Splitwise calculation for Hostel
-  const activeMembers = householdMembers && householdMembers.length > 0
-    ? householdMembers
-    : currentUser?.displayName
-    ? [currentUser.displayName]
-    : ['Me'];
-  const hostelPerPerson = Math.round(totalMonthlySpend / Math.max(1, activeMembers.length));
-
-  const handleAddCustomExpense = (e: React.FormEvent) => {
+  // ── Handle Add Recurring Bill ──
+  const handleAddBillSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newAmount) return;
-
-    const parsedAmount = parseFloat(newAmount);
+    if (!billTitle.trim()) return;
+    const parsedAmount = parseFloat(billAmount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) return;
 
-    const newExp: CustomExpense = {
-      id: `exp-${Date.now()}`,
-      title: newTitle.trim(),
-      amount: parsedAmount,
-      category: newCategory,
-      date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-      source: 'Manual Receipt',
-      paidBy: currentUser?.displayName || 'User',
-    };
-
-    const updated = [newExp, ...customExpenses];
-    setCustomExpenses(updated);
     try {
-      localStorage.setItem(`homemate_custom_exp_${mode}`, JSON.stringify(updated));
-    } catch {}
+      const newBill = await createMonthlyBill({
+        householdId,
+        title: billTitle.trim(),
+        category: billCategory,
+        amount: parsedAmount,
+        dueDay: Number(billDueDay) || 5,
+        billerAccount: billerAccount.trim(),
+        autoReminder,
+        notes: billNotes.trim(),
+      });
 
-    setNewTitle('');
-    setNewAmount('');
-    setShowAddModal(false);
+      setBills((prev) => [newBill, ...prev]);
+      showToast(`Automated reminder set for ${newBill.title} on the ${newBill.dueDay}th of every month!`);
+
+      // Reset
+      setBillTitle('');
+      setBillAmount('');
+      setBillCategory('rent');
+      setBillDueDay(5);
+      setBillerAccount('');
+      setBillNotes('');
+      setShowAddBillModal(false);
+    } catch (err) {
+      showToast('Could not schedule recurring bill');
+    }
   };
 
+  // ── Handle Payment Gateway Success ──
+  const handlePaymentGatewaySuccess = (res: PaymentGatewayResponse) => {
+    setBills((prev) =>
+      prev.map((b) =>
+        b.id === payingBill?.id
+          ? {
+              ...b,
+              status: 'paid',
+              paidDate: new Date().toISOString(),
+              paidVia: res.paymentMethod.toUpperCase(),
+              transactionRef: res.transactionId,
+            }
+          : b
+      )
+    );
+    showToast(`Payment of ₹${res.amountPaid} for ${res.billerName} verified & cleared!`);
+    setPayingBill(null);
+  };
+
+  // ── Delete Bill ──
+  const handleDeleteBill = async (id: string, title: string) => {
+    if (!confirm(`Remove recurring reminder for "${title}"?`)) return;
+    try {
+      await deleteMonthlyBillApi(id);
+      setBills((prev) => prev.filter((b) => b.id !== id));
+      showToast(`Removed "${title}" from monthly schedule`);
+    } catch (err) {
+      showToast('Could not delete bill');
+    }
+  };
+
+  // ── Manual Mark as Paid Toggle ──
+  const handleToggleManualPaid = async (bill: MonthlyBillRecord) => {
+    try {
+      if (bill.status === 'paid') {
+        // Toggle back to pending
+        setBills((prev) =>
+          prev.map((b) => (b.id === bill.id ? { ...b, status: 'pending', paidDate: undefined } : b))
+        );
+        showToast(`Reset "${bill.title}" to pending`);
+      } else {
+        await payMonthlyBillApi(bill.id, 'Cash / Manual', `MANUAL_${Date.now()}`);
+        setBills((prev) =>
+          prev.map((b) =>
+            b.id === bill.id
+              ? { ...b, status: 'paid', paidDate: new Date().toISOString(), paidVia: 'Direct' }
+              : b
+          )
+        );
+        showToast(`Marked "${bill.title}" as paid!`);
+      }
+    } catch (err) {
+      showToast('Could not update bill status');
+    }
+  };
+
+  // ── Totals & Metrics ──
+  const totalBillsAmount = bills.reduce((acc, b) => acc + b.amount, 0);
+  const paidBillsAmount = bills.filter((b) => b.status === 'paid').reduce((acc, b) => acc + b.amount, 0);
+  const pendingBillsAmount = totalBillsAmount - paidBillsAmount;
+
+  const currentMonthName = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  // Share Statement via WhatsApp
   const handleShareReportWhatsApp = () => {
-    let text = `📊 *HomeMate Monthly Expense Statement (${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })})*\n`;
-    text += `🏠 *Household Mode*: ${mode.toUpperCase()}\n`;
-    text += `💰 *Total Monthly Spend*: ₹${totalMonthlySpend.toLocaleString('en-IN')}\n\n`;
-    text += `• *Groceries & Orders*: ₹${boughtTotal} (${boughtItems.length} items bought)\n`;
-    text += `• *Chores & Maintenance*: ₹${choreMaintenanceCost} (${choreSourceLabel})\n`;
-    text += `• *Utilities / Prescriptions*: ₹${baselineUtilities} (${baselineLabel})\n`;
+    let text = `📊 *HomeMate Monthly Household Expense & Bill Statement*\n`;
+    text += `📅 Month: *${currentMonthName}*\n`;
+    text += `💰 Total Monthly Obligations: *₹${totalBillsAmount.toLocaleString('en-IN')}*\n`;
+    text += `✅ Paid so far: *₹${paidBillsAmount.toLocaleString('en-IN')}*\n`;
+    text += `⏳ Pending to Pay: *₹${pendingBillsAmount.toLocaleString('en-IN')}*\n\n`;
 
-    if (customTotal > 0) {
-      text += `• *Other Logged Expenses*: ₹${customTotal}\n`;
-    }
+    text += `*Bills Breakdown:*\n`;
+    bills.forEach((b, idx) => {
+      text += `${idx + 1}. ${b.title} (Due: ${b.dueDay}th) - ₹${b.amount} [${b.status.toUpperCase()}]\n`;
+    });
 
-    if (mode === 'hostel') {
-      text += `\n🤝 *Hostel Splitwise Equal Share*:\n`;
-      text += `₹${totalMonthlySpend} ÷ ${activeMembers.length} flatmates = *₹${hostelPerPerson} / person*\n`;
-      text += `(Split among: ${activeMembers.join(', ')})\n`;
-    }
-
-    text += `\nGenerated automatically via HomeMate AI OS`;
+    text += `\n_Automated reminder tracked digitally on HomeMate AI OS_`;
 
     navigator.clipboard.writeText(text);
-    setCopiedReportToast(true);
-    setTimeout(() => setCopiedReportToast(false), 3000);
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm interactive-card space-y-6">
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
@@ -245,419 +245,413 @@ export const MonthlyExpenseCalculator: React.FC<MonthlyExpenseCalculatorProps> =
                   : 'bg-emerald-100 text-emerald-800'
               }`}
             >
-              <PieChart className="w-5 h-5" />
+              <Calendar className="w-5 h-5" />
             </span>
             <h3 className="font-black text-lg text-slate-900 tracking-tight">
-              {language === 'hi'
-                ? 'मासिक खर्च कैलकुलेटर'
-                : language === 'bn'
-                ? 'মাসিক খরচ ক্যালকুলেটর'
-                : 'Monthly Expense & Budget Engine'}
+              Automated Monthly Expenses & Bill Reminders
             </h3>
-            <span
-              className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                mode === 'elder'
-                  ? 'bg-amber-100 text-amber-900'
-                  : mode === 'hostel'
-                  ? 'bg-indigo-100 text-indigo-800'
-                  : 'bg-emerald-100 text-emerald-800'
-              }`}
-            >
-              Auto-Synced
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+              {currentMonthName}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            {language === 'hi'
-              ? 'किराना ऑर्डर्स, घरेलू काम और बिलों के लाइव डेटा से स्वचालित गणना'
-              : language === 'bn'
-              ? 'মুদি অর্ডার, বাড়ির কাজ ও বিলের লাইভ ডেটা থেকে স্বয়ংক্রিয় হিসাব'
-              : 'Aggregated dynamically from ordered groceries, chores maintenance & utilities'}
+            Input your recurring household expenses once; the system notes them and automatically keeps monthly reminders with integrated payment gateways.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Digital Khata Trigger */}
           <button
-            onClick={handleShareReportWhatsApp}
-            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            onClick={() => setIsKhataOpen(true)}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-xs cursor-pointer transition-all"
           >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>
-              {language === 'hi'
-                ? 'व्हाट्सएप पर भेजें'
-                : language === 'bn'
-                ? 'হোয়াটসঅ্যাপে পাঠান'
-                : 'Share Statement'}
-            </span>
+            <BookOpen className="w-3.5 h-3.5 text-amber-600" />
+            <span>Digital Khata (खाता)</span>
           </button>
 
+          {/* Add Recurring Bill Button */}
           <button
-            onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs flex items-center gap-1 transition-all cursor-pointer"
+            onClick={() => setShowAddBillModal(true)}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-sm cursor-pointer transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>
-              {language === 'hi'
-                ? 'खर्च जोड़ें'
-                : language === 'bn'
-                ? 'খরচ যোগ'
-                : 'Add Expense'}
-            </span>
+            <span>+ Add Monthly Bill</span>
           </button>
         </div>
       </div>
 
-      {copiedReportToast && (
-        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center gap-2 animate-fadeIn">
-          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Expense statement copied & opening WhatsApp!</span>
+      {/* Toast */}
+      {toastMessage && (
+        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Main Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Total Spend */}
-        <div
-          className={`p-4 rounded-2xl border ${
-            mode === 'elder'
-              ? 'bg-amber-50/60 border-amber-200'
-              : mode === 'hostel'
-              ? 'bg-indigo-50/60 border-indigo-200'
-              : 'bg-emerald-50/60 border-emerald-200'
-          }`}
-        >
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-            {language === 'hi' ? 'कुल मासिक खर्च' : language === 'bn' ? 'মোট মাসিক খরচ' : 'Total Monthly Spend'}
-          </span>
-          <div className="text-2xl font-black text-slate-900 font-mono mt-1">
-            ₹{totalMonthlySpend.toLocaleString('en-IN')}
-          </div>
-          <span className="text-[10px] text-slate-500 mt-1 block">
-            Monthly cap: ₹{budgetCap.toLocaleString('en-IN')} ({percentUsed}% used)
-          </span>
-        </div>
-
-        {/* 1. Groceries & Orders */}
+      {/* Monthly Summary Cards (Starting from scratch - derived purely from real user data) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Monthly Commitments */}
         <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              {language === 'hi' ? 'किराना व ऑर्डर्स' : language === 'bn' ? 'মুদি ও অর্ডার' : 'Groceries & Orders'}
-            </span>
-            <ShoppingCart className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-xl font-black text-slate-900 font-mono mt-1">
-            ₹{boughtTotal.toLocaleString('en-IN')}
+          <span className="text-xs font-bold text-slate-500 block mb-1">
+            Total Monthly Obligations ({bills.length} Bills)
+          </span>
+          <div className="text-2xl font-black text-slate-900 flex items-center">
+            <IndianRupee className="w-5 h-5 stroke-[2.5]" />
+            <span>{totalBillsAmount.toLocaleString('en-IN')}</span>
           </div>
           <span className="text-[10px] text-slate-400 mt-1 block">
-            {boughtItems.length} items purchased • ₹{pendingItemsTotal} pending
+            {bills.length === 0 ? 'No expenses added yet — start by clicking + Add' : 'Recurring every month'}
           </span>
         </div>
 
-        {/* 2. Chores & Maintenance */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              {language === 'hi' ? 'घरेलू काम व रखरखाव' : language === 'bn' ? 'কাজ ও মেইনটেনেন্স' : 'Chores & Maintenance'}
-            </span>
-            <CheckSquare className="w-4 h-4 text-indigo-600" />
+        {/* Paid So Far */}
+        <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+          <span className="text-xs font-bold text-emerald-800 block mb-1">
+            Paid & Cleared This Month
+          </span>
+          <div className="text-2xl font-black text-emerald-700 flex items-center">
+            <IndianRupee className="w-5 h-5 stroke-[2.5]" />
+            <span>{paidBillsAmount.toLocaleString('en-IN')}</span>
           </div>
-          <div className="text-xl font-black text-slate-900 font-mono mt-1">
-            ₹{choreMaintenanceCost.toLocaleString('en-IN')}
-          </div>
-          <span className="text-[10px] text-slate-400 mt-1 block truncate" title={choreSourceLabel}>
-            {choreSourceLabel}
+          <span className="text-[10px] text-emerald-600 mt-1 block">
+            {bills.filter((b) => b.status === 'paid').length} of {bills.length} bills settled
           </span>
         </div>
 
-        {/* 3. Baseline Utilities / Meds */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              {mode === 'elder'
-                ? language === 'hi' ? 'दवाईयां व स्वास्थ्य' : language === 'bn' ? 'ওষুধ ও স্বাস্থ্য' : 'Meds & Health'
-                : language === 'hi' ? 'बिल व उपयोगिता' : language === 'bn' ? 'বিল ও রিচার্জ' : 'Utilities & Bills'}
-            </span>
-            <Receipt className="w-4 h-4 text-teal-600" />
+        {/* Pending & Due */}
+        <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
+          <span className="text-xs font-bold text-amber-900 block mb-1">
+            Pending / Due to Pay
+          </span>
+          <div className="text-2xl font-black text-amber-700 flex items-center">
+            <IndianRupee className="w-5 h-5 stroke-[2.5]" />
+            <span>{pendingBillsAmount.toLocaleString('en-IN')}</span>
           </div>
-          <div className="text-xl font-black text-slate-900 font-mono mt-1">
-            ₹{baselineUtilities.toLocaleString('en-IN')}
-          </div>
-          <span className="text-[10px] text-slate-400 mt-1 block truncate" title={baselineLabel}>
-            {baselineLabel}
+          <span className="text-[10px] text-amber-700 mt-1 block">
+            {bills.filter((b) => b.status !== 'paid').length} payments outstanding
           </span>
         </div>
       </div>
 
-      {/* Progress Bar Gauge */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-          <span>Budget Utilization Gauge</span>
-          <span className="font-mono">{percentUsed}% of ₹{budgetCap.toLocaleString('en-IN')} limit</span>
-        </div>
-        <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden flex">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${
-              percentUsed > 85 ? 'bg-rose-500' : percentUsed > 60 ? 'bg-amber-500' : 'bg-emerald-500'
-            }`}
-            style={{ width: `${percentUsed}%` }}
-          />
-        </div>
-      </div>
+      {/* Bills Reminder List */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+            <Calendar className="w-4 h-4 text-emerald-600" />
+            <span>Active Automated Reminders & Payment Status</span>
+          </h4>
 
-      {/* SPECIAL HOSTEL SPLITWISE SECTION */}
-      {mode === 'hostel' && (
-        <div className="p-5 rounded-3xl bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white border-2 border-indigo-400 shadow-xl space-y-4 animate-fadeIn">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/40">
-                  Splitwise Equal Division
-                </span>
-                <span className="text-xs text-indigo-200">
-                  Total ₹{totalMonthlySpend} ÷ {activeMembers.length} Flatmates
-                </span>
-              </div>
-              <h4 className="text-xl font-black text-white mt-1">
-                Each Flatmate Owes: <span className="font-mono text-emerald-400">₹{hostelPerPerson}</span>
-              </h4>
-              <p className="text-xs text-indigo-200 mt-0.5">
-                Includes all bought groceries, midnight runs, chore penalty fund, Wi-Fi fiber & RO refills
-              </p>
-            </div>
-
+          {bills.length > 0 && (
             <button
-              onClick={() => {
-                if (onTriggerUpiModal) {
-                  const adminName = activeMembers[0] || currentUser?.displayName || 'Flat Admin';
-                  const adminUpi = `${adminName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'admin'}@upi`;
-                  onTriggerUpiModal(
-                    'Hostel Monthly Flat Share',
-                    hostelPerPerson,
-                    `${adminName} (Flat Admin)`,
-                    adminUpi,
-                    'monthly_split_hostel'
-                  );
-                }
-              }}
-              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg flex items-center gap-2 cursor-pointer transition-all active:scale-95 shrink-0"
+              onClick={handleShareReportWhatsApp}
+              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
             >
-              <QrCode className="w-4 h-4 stroke-[2.5]" />
-              <span>Pay Share via UPI QR (₹{hostelPerPerson})</span>
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share Statement on WhatsApp</span>
             </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            {activeMembers.map((person) => (
-              <div
-                key={person}
-                className="p-3 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-between text-xs"
-              >
-                <div>
-                  <span className="font-bold text-indigo-100 block">{person}</span>
-                  <span className="text-[10px] text-slate-400">Equal Flat Share</span>
-                </div>
-                <div className="text-right">
-                  <span className="font-black font-mono text-emerald-300 text-sm block">
-                    ₹{hostelPerPerson}
-                  </span>
-                  <span className="text-[9px] font-bold text-indigo-300 uppercase">
-                    Split 1/{activeMembers.length}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+          )}
         </div>
-      )}
 
-      {/* Itemized Source Breakdown */}
-      <div className="space-y-3 pt-2">
-        <h4 className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-          <Receipt className="w-3.5 h-3.5 text-slate-500" />
-          <span>Itemized Monthly Ledger & Data Feed</span>
-        </h4>
-
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-1 text-xs">
-          {/* Bought Grocery Items */}
-          {boughtItems.map((item) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {bills.map((bill) => (
             <div
-              key={item.id}
-              className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3"
+              key={bill.id}
+              className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                bill.status === 'paid'
+                  ? 'bg-emerald-50/40 border-emerald-300'
+                  : bill.status === 'due_soon'
+                  ? 'bg-amber-50/40 border-amber-300 shadow-xs'
+                  : bill.status === 'overdue'
+                  ? 'bg-rose-50/40 border-rose-300 shadow-xs'
+                  : 'bg-white border-slate-200 hover:shadow-md'
+              }`}
             >
-              <div className="flex items-center gap-2.5">
-                <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
-                  <ShoppingCart className="w-3.5 h-3.5" />
-                </span>
-                <div>
-                  <span className="font-bold text-slate-800">{item.title}</span>
-                  <span className="text-[11px] text-slate-400 block">
-                    {item.quantity || '1 unit'} • Source: {item.addedBy}
-                  </span>
+              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-sm text-slate-900">
+                        {bill.title}
+                      </span>
+                      {/* Status Badge */}
+                      {bill.status === 'paid' ? (
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Paid ({bill.paidVia || 'Cleared'})</span>
+                        </span>
+                      ) : bill.status === 'due_soon' ? (
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          <span>Due in 3 Days</span>
+                        </span>
+                      ) : bill.status === 'overdue' ? (
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-rose-600" />
+                          <span>Overdue</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                          Due {bill.dueDay}th
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs font-semibold text-slate-500 capitalize">
+                      {bill.category} • Scheduled on the {bill.dueDay}th of each month
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => handleDeleteBill(bill.id, bill.title)}
+                    title="Remove reminder"
+                    className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
+
+                {bill.billerAccount && (
+                  <div className="mt-1.5 text-[11px] font-mono text-slate-500">
+                    Biller ID / Account: {bill.billerAccount}
+                  </div>
+                )}
+
+                {bill.notes && (
+                  <p className="mt-1 text-[11px] text-slate-500 italic">
+                    "{bill.notes}"
+                  </p>
+                )}
               </div>
-              <div className="text-right">
-                <span className="font-black font-mono text-slate-900 block">
-                  ₹{estimateItemPrice(item)}
-                </span>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-md">
-                  Ordered ✓
-                </span>
+
+              {/* Amount & Direct Gateway Action */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Amount</span>
+                  <div className="text-lg font-black text-slate-900 flex items-center">
+                    <IndianRupee className="w-4 h-4 stroke-[2.5]" />
+                    <span>{bill.amount.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleToggleManualPaid(bill)}
+                    className="text-[11px] font-bold text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {bill.status === 'paid' ? 'Mark Unpaid' : 'Mark Cash'}
+                  </button>
+
+                  {bill.status !== 'paid' && (
+                    <button
+                      onClick={() => setPayingBill(bill)}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-xs cursor-pointer transition-all"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Pay via Gateway</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
 
-          {/* Chores Maintenance Item */}
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-800">
-                <CheckSquare className="w-3.5 h-3.5" />
-              </span>
+          {/* Empty State when user hasn't added expenses yet (Starting from scratch) */}
+          {bills.length === 0 && (
+            <div className="col-span-full p-8 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 space-y-3">
+              <Calendar className="w-10 h-10 text-slate-400 mx-auto" />
               <div>
-                <span className="font-bold text-slate-800">
-                  {mode === 'hostel' ? 'Flat Chores & Samosa Penalty Fund' : 'House Chores & Maintenance'}
-                </span>
-                <span className="text-[11px] text-slate-400 block">{choreSourceLabel}</span>
+                <h4 className="text-sm font-extrabold text-slate-800">
+                  No monthly expenses or reminders setup yet
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                  Start from a clean slate! Add your rent, electricity bill, Wi-Fi, maid salary, or groceries once. HomeMate will automatically keep track of them and notify you every month.
+                </p>
               </div>
-            </div>
-            <div className="text-right">
-              <span className="font-black font-mono text-slate-900 block">
-                ₹{choreMaintenanceCost}
-              </span>
-              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded-md">
-                Chores Feed
-              </span>
-            </div>
-          </div>
 
-          {/* Baseline Utilities Item */}
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="p-1.5 rounded-lg bg-teal-100 text-teal-800">
-                <Receipt className="w-3.5 h-3.5" />
-              </span>
-              <div>
-                <span className="font-bold text-slate-800">
-                  {mode === 'elder' ? 'Prescription Meds & Diagnostics' : 'Fixed Utilities & Bills'}
-                </span>
-                <span className="text-[11px] text-slate-400 block">{baselineLabel}</span>
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  onClick={() => setShowAddBillModal(true)}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm cursor-pointer transition-all flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add First Monthly Bill</span>
+                </button>
               </div>
             </div>
-            <div className="text-right">
-              <span className="font-black font-mono text-slate-900 block">
-                ₹{baselineUtilities}
-              </span>
-              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded-md">
-                Recurring
-              </span>
-            </div>
-          </div>
-
-          {/* Custom Logged Expenses */}
-          {customExpenses.map((exp) => (
-            <div
-              key={exp.id}
-              className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3"
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="p-1.5 rounded-lg bg-amber-100 text-amber-800">
-                  <IndianRupee className="w-3.5 h-3.5" />
-                </span>
-                <div>
-                  <span className="font-bold text-slate-800">{exp.title}</span>
-                  <span className="text-[11px] text-slate-400 block">
-                    {exp.date} • Paid by {exp.paidBy || 'Self'}
-                  </span>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="font-black font-mono text-slate-900 block">₹{exp.amount}</span>
-                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded-md">
-                  Receipt
-                </span>
-              </div>
-            </div>
-          ))}
+          )}
         </div>
       </div>
 
-      {/* Add Custom Expense Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-black text-slate-900 text-base">Add Household Expense</h3>
+      {/* Add Recurring Bill Modal */}
+      {showAddBillModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-auto p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <h4 className="font-black text-base text-slate-900">
+                  New Automated Monthly Reminder
+                </h4>
+              </div>
               <button
-                onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer"
+                onClick={() => setShowAddBillModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleAddCustomExpense} className="space-y-4 text-xs">
+            <form onSubmit={handleAddBillSubmit} className="space-y-3.5">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Expense Description *
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Expense / Bill Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Extra Gas cylinder, Electrician repair, Chemist receipt..."
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
                   required
+                  value={billTitle}
+                  onChange={(e) => setBillTitle(e.target.value)}
+                  placeholder="e.g. Apartment Rent, Electricity (BESCOM), Wi-Fi Fiber..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Monthly Amount (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={billAmount}
+                    onChange={(e) => setBillAmount(e.target.value)}
+                    placeholder="e.g. 15000"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Due Day of Each Month
+                  </label>
+                  <select
+                    value={billDueDay}
+                    onChange={(e) => setBillDueDay(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {[1, 2, 3, 5, 7, 10, 15, 20, 25, 28, 30].map((day) => (
+                      <option key={day} value={day}>
+                        {day}th of every month
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={billCategory}
+                    onChange={(e) => setBillCategory(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="rent">House Rent</option>
+                    <option value="electricity">Electricity Bill</option>
+                    <option value="wifi">Wi-Fi & Broadband</option>
+                    <option value="salary">Maid / Cook Salary</option>
+                    <option value="gas">LPG Gas Cylinder</option>
+                    <option value="maintenance">Society Maintenance</option>
+                    <option value="water">Water / RO Can</option>
+                    <option value="groceries">Monthly Kirana Pool</option>
+                    <option value="medical">Senior Medicines / Care</option>
+                    <option value="subscription">Subscriptions / Gym</option>
+                    <option value="other">Other Recurring</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Consumer / Biller Account No. (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={billerAccount}
+                    onChange={(e) => setBillerAccount(e.target.value)}
+                    placeholder="e.g. 5010029104"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Amount (₹) *
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Notes / Payment Instructions
                 </label>
                 <input
-                  type="number"
-                  placeholder="₹ 500"
-                  value={newAmount}
-                  onChange={(e) => setNewAmount(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-sm font-bold"
-                  required
+                  type="text"
+                  value={billNotes}
+                  onChange={(e) => setBillNotes(e.target.value)}
+                  placeholder="e.g. Transfer to landlord via Google Pay"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Category
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="auto-reminder-check"
+                  checked={autoReminder}
+                  onChange={(e) => setAutoReminder(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <label htmlFor="auto-reminder-check" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  Automatically roll over and remind me every month
                 </label>
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold bg-white"
-                >
-                  <option value="groceries">Groceries / Orders</option>
-                  <option value="chores">Chores & Upkeep</option>
-                  <option value="bills">Utilities & Bills</option>
-                  <option value="meds">Meds & Healthcare</option>
-                  <option value="other">Other Receipts</option>
-                </select>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-50 cursor-pointer"
+                  onClick={() => setShowAddBillModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
                 >
-                  {t.cancelBtn}
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black shadow-md cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-sm cursor-pointer"
                 >
-                  Save Expense
+                  Save Monthly Reminder
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Payment Gateway Modal */}
+      <BillPaymentGatewayModal
+        isOpen={!!payingBill}
+        onClose={() => setPayingBill(null)}
+        bill={payingBill}
+        onPaymentSuccess={handlePaymentGatewaySuccess}
+      />
+
+      {/* Household Digital Khata Modal */}
+      <HouseholdKhataModal
+        isOpen={isKhataOpen}
+        onClose={() => setIsKhataOpen(false)}
+        householdId={householdId}
+        language={language}
+        onPayViaUpi={onTriggerUpiModal ? (title, amt, upi) => onTriggerUpiModal(title, amt, 'User', upi, `khata-${Date.now()}`) : undefined}
+      />
+
     </div>
   );
 };

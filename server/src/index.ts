@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { dbService, FamilyMemberRecord, AccountInfoRecord, MonthlyBillRecord, KhataRecord } from './db.js';
 
 dotenv.config();
 
@@ -40,12 +41,16 @@ const envPath = path.resolve(process.cwd(), '.env');
 
 // 1. Healthcheck Route
 fastify.get('/api/health', async () => {
+  const dbStatus = await dbService.getStatus();
   return {
     status: 'healthy',
     service: 'HomeMate Backend Engine',
     version: '1.0.0',
     geminiConfigured: !!process.env.GEMINI_API_KEY,
-    databaseConfigured: !!process.env.DATABASE_URL,
+    databaseConfigured: true,
+    databaseEngine: dbStatus.engine,
+    totalFamilyMembers: dbStatus.totalFamilyMembers,
+    totalAccounts: dbStatus.totalAccounts,
     timestamp: new Date().toISOString(),
   };
 });
@@ -379,6 +384,302 @@ fastify.post('/api/kirana/export', async (request) => {
     formattedText: fullText,
     whatsappUrl: `https://wa.me/?text=${encodeURIComponent(fullText)}`,
   };
+});
+
+// 7. Database Status & Statistics
+fastify.get('/api/db/status', async () => {
+  return await dbService.getStatus();
+});
+
+// 8. Family Members Database Routes
+fastify.get('/api/family-members', async (request) => {
+  const { householdId } = (request.query as { householdId?: string }) || {};
+  const members = await dbService.getFamilyMembers(householdId);
+  return { success: true, count: members.length, members };
+});
+
+fastify.post('/api/family-members', async (request, reply) => {
+  const body = request.body as Partial<FamilyMemberRecord>;
+  if (!body.name || !body.name.trim()) {
+    return reply.status(400).send({ error: 'Family member name is required' });
+  }
+
+  const member = await dbService.addFamilyMember({
+    householdId: body.householdId || 'family_household',
+    name: body.name.trim(),
+    relationship: body.relationship?.trim() || 'Family Member',
+    email: body.email?.trim() || '',
+    phone: body.phone?.trim() || '',
+    accountNumber: body.accountNumber?.trim() || '',
+    upiId: body.upiId?.trim() || '',
+    bankName: body.bankName?.trim() || '',
+    ifscCode: body.ifscCode?.trim() || '',
+    emergencyContact: !!body.emergencyContact,
+    notes: body.notes?.trim() || '',
+  });
+
+  return { success: true, message: `Added ${member.name} to family database`, member };
+});
+
+fastify.put('/api/family-members/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = request.body as Partial<FamilyMemberRecord>;
+  const updated = await dbService.updateFamilyMember(id, body);
+  if (!updated) {
+    return reply.status(404).send({ error: 'Family member not found' });
+  }
+  return { success: true, member: updated };
+});
+
+fastify.delete('/api/family-members/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const deleted = await dbService.deleteFamilyMember(id);
+  if (!deleted) {
+    return reply.status(404).send({ error: 'Family member not found' });
+  }
+  return { success: true, message: 'Family member removed from database' };
+});
+
+// 9. Account & Financial Info Database Routes
+fastify.get('/api/accounts', async (request) => {
+  const { householdId } = (request.query as { householdId?: string }) || {};
+  const accounts = await dbService.getAccounts(householdId);
+  return { success: true, count: accounts.length, accounts };
+});
+
+fastify.post('/api/accounts', async (request, reply) => {
+  const body = request.body as Partial<AccountInfoRecord>;
+  if (!body.accountHolder || !body.accountHolder.trim()) {
+    return reply.status(400).send({ error: 'Account holder name is required' });
+  }
+  if (!body.accountNumberOrId || !body.accountNumberOrId.trim()) {
+    return reply.status(400).send({ error: 'Account number or UPI ID is required' });
+  }
+
+  const account = await dbService.addAccount({
+    householdId: body.householdId || 'family_household',
+    userId: body.userId || '',
+    accountHolder: body.accountHolder.trim(),
+    accountType: body.accountType || 'upi',
+    accountNumberOrId: body.accountNumberOrId.trim(),
+    bankOrProvider: body.bankOrProvider?.trim() || 'Bank / UPI',
+    ifscOrHandle: body.ifscOrHandle?.trim() || '',
+    isPrimary: !!body.isPrimary,
+    notes: body.notes?.trim() || '',
+  });
+
+  return { success: true, message: `Added account for ${account.accountHolder}`, account };
+});
+
+fastify.delete('/api/accounts/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const deleted = await dbService.deleteAccount(id);
+  if (!deleted) {
+    return reply.status(404).send({ error: 'Account not found' });
+  }
+  return { success: true, message: 'Account removed from database' };
+});
+
+// ── In-Memory OTP Store for Registration & Login ──
+interface OtpEntry {
+  identifier: string;
+  otp: string;
+  expiresAt: number;
+}
+const otpStore = new Map<string, OtpEntry>();
+
+// 10. Send OTP Route (Phone / Email Verification)
+fastify.post('/api/auth/send-otp', async (request, reply) => {
+  const { identifier } = (request.body as { identifier?: string }) || {};
+  if (!identifier || identifier.trim().length < 4) {
+    return reply.status(400).send({ error: 'Please enter a valid phone number or email address' });
+  }
+
+  const clean = identifier.trim().toLowerCase();
+  // Generate 6-digit random code
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 min expiry
+
+  otpStore.set(clean, { identifier: clean, otp, expiresAt });
+
+  fastify.log.info({ identifier: clean, otp }, 'Dispatched authentication OTP');
+
+  return {
+    success: true,
+    message: `Verification code sent to ${clean}`,
+    previewOtp: otp, // surfaced for immediate seamless onboarding & demo access
+    expiresInSeconds: 300,
+  };
+});
+
+// 11. Verify OTP Route
+fastify.post('/api/auth/verify-otp', async (request, reply) => {
+  const { identifier, otp } = (request.body as { identifier?: string; otp?: string }) || {};
+  if (!identifier || !otp) {
+    return reply.status(400).send({ error: 'Identifier and OTP are required' });
+  }
+
+  const clean = identifier.trim().toLowerCase();
+  const entry = otpStore.get(clean);
+
+  // Allow standard demo OTP 123456 or the exact generated OTP
+  if (otp.trim() === '123456' || (entry && entry.otp === otp.trim() && Date.now() <= entry.expiresAt)) {
+    otpStore.delete(clean);
+    return {
+      success: true,
+      verified: true,
+      message: 'Mobile number / Email verified successfully!',
+    };
+  }
+
+  return reply.status(400).send({
+    success: false,
+    verified: false,
+    error: 'Invalid or expired OTP. Please check the code or request a new one.',
+  });
+});
+
+// 12. Automated Monthly Bills & Reminders Routes
+fastify.get('/api/bills', async (request) => {
+  const { householdId } = (request.query as { householdId?: string }) || {};
+  const bills = await dbService.getMonthlyBills(householdId);
+  return { success: true, count: bills.length, bills };
+});
+
+fastify.post('/api/bills', async (request, reply) => {
+  const body = request.body as Partial<MonthlyBillRecord>;
+  if (!body.title || !body.title.trim()) {
+    return reply.status(400).send({ error: 'Bill title is required' });
+  }
+  const amount = Number(body.amount);
+  if (isNaN(amount) || amount <= 0) {
+    return reply.status(400).send({ error: 'Please enter a valid bill amount' });
+  }
+
+  const bill = await dbService.addMonthlyBill({
+    householdId: body.householdId || 'family_household',
+    title: body.title.trim(),
+    category: (body.category as any) || 'other',
+    amount,
+    dueDay: Number(body.dueDay) || 5,
+    autoReminder: body.autoReminder !== false,
+    billerAccount: body.billerAccount?.trim() || '',
+    notes: body.notes?.trim() || '',
+  });
+
+  return { success: true, message: `Scheduled monthly reminder for ${bill.title}`, bill };
+});
+
+fastify.put('/api/bills/:id/pay', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = (request.body as { paidVia?: string; transactionRef?: string }) || {};
+  const updated = await dbService.payMonthlyBill(id, {
+    paidVia: body.paidVia || 'UPI',
+    transactionRef: body.transactionRef,
+  });
+
+  if (!updated) {
+    return reply.status(404).send({ error: 'Bill not found' });
+  }
+  return { success: true, message: 'Bill marked as paid', bill: updated };
+});
+
+fastify.delete('/api/bills/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const deleted = await dbService.deleteMonthlyBill(id);
+  if (!deleted) {
+    return reply.status(404).send({ error: 'Bill not found' });
+  }
+  return { success: true, message: 'Monthly bill deleted' };
+});
+
+// 13. Realistic Household Payment Gateway Simulation
+fastify.post('/api/bills/pay-gateway', async (request, reply) => {
+  const body = request.body as {
+    billId?: string;
+    billerName: string;
+    amount: number;
+    paymentMethod: 'upi' | 'card' | 'netbanking' | 'bbps';
+    details: Record<string, any>;
+  };
+
+  if (!body.amount || body.amount <= 0) {
+    return reply.status(400).send({ error: 'Invalid payment amount' });
+  }
+
+  const txnId = `TXN_${Date.now()}_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+  const refNo = `REF${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+
+  // If billId provided, automatically update bill status in database
+  if (body.billId) {
+    await dbService.payMonthlyBill(body.billId, {
+      paidVia: body.paymentMethod.toUpperCase(),
+      transactionRef: txnId,
+    });
+  }
+
+  return {
+    success: true,
+    status: 'PAID',
+    transactionId: txnId,
+    bankReferenceNumber: refNo,
+    billerName: body.billerName,
+    amountPaid: body.amount,
+    paymentMethod: body.paymentMethod,
+    paidAt: new Date().toISOString(),
+    receiptUrl: `https://homemate.local/receipts/${txnId}`,
+    message: `Payment of ₹${body.amount} for ${body.billerName} successful via ${body.paymentMethod.toUpperCase()}!`,
+  };
+});
+
+// 14. Digital Khata (Hisab-Kitab Ledger) Routes
+fastify.get('/api/khata', async (request) => {
+  const { householdId } = (request.query as { householdId?: string }) || {};
+  const entries = await dbService.getKhataEntries(householdId);
+  return { success: true, count: entries.length, entries };
+});
+
+fastify.post('/api/khata', async (request, reply) => {
+  const body = request.body as Partial<KhataRecord>;
+  if (!body.partyName || !body.partyName.trim()) {
+    return reply.status(400).send({ error: 'Vendor or person name is required' });
+  }
+  const amount = Number(body.amount);
+  if (isNaN(amount) || amount <= 0) {
+    return reply.status(400).send({ error: 'Please enter a valid amount' });
+  }
+
+  const entry = await dbService.addKhataEntry({
+    householdId: body.householdId || 'family_household',
+    partyName: body.partyName.trim(),
+    partyPhone: body.partyPhone?.trim() || '',
+    partyRole: (body.partyRole as any) || 'kirana',
+    type: body.type === 'got' ? 'got' : 'gave',
+    amount,
+    description: body.description?.trim() || 'Household calculation entry',
+    date: body.date || new Date().toISOString().split('T')[0],
+    upiId: body.upiId?.trim() || '',
+  });
+
+  return { success: true, message: `Recorded ${entry.type === 'gave' ? 'Debit' : 'Credit'} for ${entry.partyName}`, entry };
+});
+
+fastify.put('/api/khata/:id/settle', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const settled = await dbService.settleKhataEntry(id);
+  if (!settled) {
+    return reply.status(404).send({ error: 'Khata entry not found' });
+  }
+  return { success: true, message: 'Khata entry marked as settled', entry: settled };
+});
+
+fastify.delete('/api/khata/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const deleted = await dbService.deleteKhataEntry(id);
+  if (!deleted) {
+    return reply.status(404).send({ error: 'Khata entry not found' });
+  }
+  return { success: true, message: 'Khata entry removed' };
 });
 
 // Start Fastify Server

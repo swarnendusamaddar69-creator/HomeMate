@@ -52,6 +52,11 @@ import { WidgetSuggestionsModal } from './components/WidgetSuggestionsModal';
 import { LoginOnboarding } from './components/LoginOnboarding';
 import { BackgroundAura } from './components/BackgroundAura';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { FamilyDatabaseModal } from './components/FamilyDatabaseModal';
+import { EmptyStateView } from './components/EmptyStateView';
+import { NotFoundPage } from './components/NotFoundPage';
+import { Footer } from './components/Footer';
+import { ToastNotification, ToastMessage } from './components/ToastNotification';
 import { translations } from './utils/translations';
 import { Camera, Undo2, CheckCircle2, Sparkles } from 'lucide-react';
 import { playChimeSound } from './utils/notifications';
@@ -192,9 +197,46 @@ export function App() {
   // Modals & Widgets toggles
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
+  const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'dashboard' | 'empty' | '404'>('dashboard');
   const [weatherWidgetEnabled, setWeatherWidgetEnabled] = useState(true);
   const [voiceHudEnabled, setVoiceHudEnabled] = useState(true);
   const [undoToast, setUndoToast] = useState<{ message: string; onUndo: () => void } | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = (toast: Omit<ToastMessage, 'id'>) => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const newToast: ToastMessage = { ...toast, id };
+    setToasts((prev) => [...prev, newToast]);
+
+    const duration = toast.duration || (toast.type === 'error' ? 6000 : 3800);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, duration);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // Dynamic Page Titles (Fix page Titles requirement)
+  useEffect(() => {
+    let title = 'HomeMate — Smart Household AI Operating System';
+    if (!isLoggedIn) {
+      title = 'HomeMate — Sign In or Setup Household';
+    } else if (activeView === '404') {
+      title = 'HomeMate — 404 Room Not Found';
+    } else if (activeView === 'empty') {
+      title = 'HomeMate — Fresh Household Setup';
+    } else if (currentMode === 'elder') {
+      title = 'HomeMate — Elder Care & Medication Reminder';
+    } else if (currentMode === 'hostel') {
+      title = 'HomeMate — Hostel Flatmate & Splitwise';
+    } else if (currentMode === 'family') {
+      title = 'HomeMate — Family Household & Smart OS';
+    }
+    document.title = title;
+  }, [currentMode, activeView, isLoggedIn]);
 
   const t = translations[language];
 
@@ -615,9 +657,46 @@ export function App() {
 
   const triggerUndoableAction = (message: string, onUndo: () => void) => {
     setUndoToast({ message, onUndo });
+    addToast({ type: 'success', message, onUndo });
     setTimeout(() => {
       setUndoToast((prev) => (prev?.message === message ? null : prev));
     }, 6000);
+  };
+
+  const handleLoadStarterPack = () => {
+    handleAddShoppingItem({
+      title: 'Fresh Amul Milk',
+      localTitle: 'दूध',
+      quantity: '2 Packets',
+      category: 'dairy',
+      addedBy: currentUser?.displayName || 'Me',
+      status: 'pending',
+      reason: 'routine',
+    });
+    handleAddShoppingItem({
+      title: 'Whole Wheat Atta',
+      localTitle: 'आटा',
+      quantity: '5 kg',
+      category: 'staples',
+      addedBy: currentUser?.displayName || 'Me',
+      status: 'pending',
+      reason: 'routine',
+    });
+    handleAddShoppingItem({
+      title: 'Fresh Farm Tomatoes',
+      localTitle: 'टमाटर',
+      quantity: '1 kg',
+      category: 'vegetables',
+      addedBy: currentUser?.displayName || 'Me',
+      status: 'pending',
+      reason: 'routine',
+    });
+    addToast({
+      type: 'success',
+      title: 'Household Starter Pack Loaded',
+      message: 'Added fresh milk, whole wheat flour, and tomatoes to your active list!',
+    });
+    setActiveView('dashboard');
   };
 
   // If user is not logged in or has no active session, show the Dedicated Login Onboarding screen
@@ -653,10 +732,36 @@ export function App() {
         language={language}
         onLanguageChange={setLanguage}
         onOpenWidgetSuggestions={() => setIsWidgetModalOpen(true)}
+        onOpenDatabase={() => setIsDatabaseModalOpen(true)}
+        onOpenEmptyState={() => setActiveView('empty')}
+        onOpen404={() => setActiveView('404')}
+        onSelectMode={handleSelectMode}
       />
 
-      {/* 2. Main Content Container (with safe-area and mobile dock bottom clearance) */}
-      <main className="relative z-10 max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5 sm:space-y-6 pb-28 sm:pb-12 safe-area-bottom">
+      {/* 2. Active View Container: Empty State Page */}
+      {activeView === 'empty' && (
+        <EmptyStateView
+          currentMode={currentMode}
+          language={language}
+          onOpenScan={() => setIsScanModalOpen(true)}
+          onOpenDatabase={() => setIsDatabaseModalOpen(true)}
+          onAddShoppingClick={() => setActiveView('dashboard')}
+          onReturnToDashboard={() => setActiveView('dashboard')}
+          onLoadStarterPack={handleLoadStarterPack}
+        />
+      )}
+
+      {/* 3. Active View Container: 404 Room Not Found Page */}
+      {activeView === '404' && (
+        <NotFoundPage
+          onReturnHome={() => setActiveView('dashboard')}
+          onSelectMode={handleSelectMode}
+        />
+      )}
+
+      {/* 4. Active View Container: Main Dashboard */}
+      {activeView === 'dashboard' && (
+        <main className="relative z-10 max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5 sm:space-y-6 pb-28 sm:pb-12 safe-area-bottom">
         {/* Quick Hero Banner with Real Camera Fridge Scan Button */}
         <div
           className={`flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-3xl border shadow-xs interactive-card ${
@@ -802,6 +907,29 @@ export function App() {
           />
         )}
       </main>
+      )}
+
+      {/* Footer with clickable phone number in description at bottom, clickable email, links */}
+      <Footer
+        currentMode={currentMode}
+        onOpenDatabase={() => setIsDatabaseModalOpen(true)}
+        onOpenEmptyState={() => setActiveView('empty')}
+        onOpen404={() => setActiveView('404')}
+        onOpenWidgets={() => setIsWidgetModalOpen(true)}
+        onSelectMode={handleSelectMode}
+      />
+
+      {/* Family Members & Account Info Database Modal */}
+      <FamilyDatabaseModal
+        isOpen={isDatabaseModalOpen}
+        onClose={() => setIsDatabaseModalOpen(false)}
+        householdId={activeHouseholdKey}
+        householdName={activeHousehold?.name || 'Family Household'}
+        onMemberAdded={handleAddMember}
+      />
+
+      {/* Global Success & Error Notification Toast Stack */}
+      <ToastNotification toasts={toasts} onDismiss={dismissToast} />
 
       {/* AI Fridge Scan Modal (Supports Real Device Camera) */}
       <FridgeScanModal

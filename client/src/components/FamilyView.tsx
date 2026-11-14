@@ -19,6 +19,7 @@ import { QuickCommerceHub } from './QuickCommerceHub';
 import { FamilyChoresHub } from './FamilyChoresHub';
 import { MonthlyExpenseCalculator } from './MonthlyExpenseCalculator';
 import { EditGroceryModal } from './EditGroceryModal';
+import { DirectCartAutomationModal } from './DirectCartAutomationModal';
 import { translations } from '../utils/translations';
 
 interface FamilyViewProps {
@@ -64,6 +65,17 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
   const [paidBills, setPaidBills] = useState<string[]>([]);
   const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
+  const [showDirectCartModal, setShowDirectCartModal] = useState(false);
+  const [directCartPlatform, setDirectCartPlatform] = useState<'Zepto' | 'Blinkit'>('Zepto');
+
+  const handleMarkAsCarted = (itemIds: string[]) => {
+    itemIds.forEach((id) => {
+      const match = shoppingItems.find((i) => i.id === id);
+      if (match && match.status === 'pending') {
+        onToggleItem(id);
+      }
+    });
+  };
 
   const t = translations[language];
 
@@ -212,13 +224,27 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
               </p>
             </div>
 
-            <button
-              onClick={handleCopyForQuickCommerce}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <Copy className="w-3.5 h-3.5 text-slate-500" />
-              <span>{t.copyForQuickCommerce}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  setDirectCartPlatform('Zepto');
+                  setShowDirectCartModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
+                title="Directly Cart to Zepto or Blinkit"
+              >
+                <Zap className="w-3.5 h-3.5 fill-white" />
+                <span>Auto-Cart to Zepto / Blinkit</span>
+              </button>
+
+              <button
+                onClick={handleCopyForQuickCommerce}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                <span>{t.copyForQuickCommerce}</span>
+              </button>
+            </div>
           </div>
 
           {copiedNotification && (
@@ -445,6 +471,17 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
         onAddItem={onAddItem}
         currentMode="family"
         language={language}
+        onMarkAsBought={handleMarkAsCarted}
+      />
+
+      {/* Direct Quick Commerce Automation Modal */}
+      <DirectCartAutomationModal
+        isOpen={showDirectCartModal}
+        onClose={() => setShowDirectCartModal(false)}
+        items={shoppingItems.filter((i) => i.status === 'pending')}
+        onMarkAsCarted={handleMarkAsCarted}
+        language={language}
+        defaultPlatform={directCartPlatform}
       />
 
       {/* Edit Grocery Item Modal */}

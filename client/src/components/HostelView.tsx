@@ -534,6 +534,7 @@ export const HostelView: React.FC<HostelViewProps> = ({
               onAddItem={onAddShoppingItem}
               currentMode="hostel"
               language={language}
+              onMarkAsBought={(ids) => ids.forEach((id) => onToggleShoppingItem(id))}
             />
           </div>
         )}
