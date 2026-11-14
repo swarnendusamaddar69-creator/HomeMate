@@ -371,19 +371,26 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
     }, 2500);
   };
 
-  const openQuickCommerceSearch = (platform: 'Zepto' | 'Blinkit' | 'Instamart', query: string) => {
-    let url = '';
+  const getPlatformSearchUrl = (platform: 'Zepto' | 'Blinkit' | 'Instamart', query: string) => {
     const q = encodeURIComponent(query.trim() || 'grocery');
-
     if (platform === 'Zepto') {
-      url = `https://www.zeptonow.com/search?q=${q}`;
+      return `https://www.zeptonow.com/search?q=${q}`;
     } else if (platform === 'Blinkit') {
-      url = `https://blinkit.com/s/?q=${q}`;
+      return `https://blinkit.com/s/?q=${q}`;
     } else {
-      url = `https://www.swiggy.com/instamart/search?query=${q}`;
+      return `https://www.swiggy.com/instamart/search?query=${q}`;
     }
+  };
 
-    window.open(url, '_blank');
+  const getPlatformCartUrl = (platform: 'Zepto' | 'Blinkit' | 'Instamart') => {
+    if (platform === 'Zepto') return 'https://www.zeptonow.com/cart';
+    if (platform === 'Blinkit') return 'https://blinkit.com/cart';
+    return 'https://www.swiggy.com/instamart';
+  };
+
+  const openQuickCommerceSearch = (platform: 'Zepto' | 'Blinkit' | 'Instamart', query: string) => {
+    const url = getPlatformSearchUrl(platform, query);
+    window.location.href = url;
   };
 
   const filteredProducts = QUICK_COMMERCE_CATALOG.filter((prod) => {
@@ -436,35 +443,41 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
             <span>Direct Blinkit Auto-Cart ({shoppingItems.filter((i) => i.status === 'pending').length})</span>
           </button>
 
-          <button
-            onClick={() => openQuickCommerceSearch('Blinkit', shoppingItems[0]?.title || 'vegetables')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
-            title="Open Blinkit 8-Min Delivery"
+          <a
+            href={getPlatformSearchUrl('Blinkit', shoppingItems[0]?.title || 'vegetables')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition-all shadow-xs hover:scale-102"
+            title="Open Live Blinkit Store (Native Link - No Pop-Up Block)"
           >
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
             <span>Blinkit ({t.blinkitEta})</span>
             <ExternalLink className="w-3 h-3 text-amber-700" />
-          </button>
+          </a>
 
-          <button
-            onClick={() => openQuickCommerceSearch('Zepto', shoppingItems[0]?.title || 'milk')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
-            title="Open Zepto 10-Min Delivery"
+          <a
+            href={getPlatformSearchUrl('Zepto', shoppingItems[0]?.title || 'milk')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold transition-all shadow-xs hover:scale-102"
+            title="Open Live Zepto Store (Native Link - No Pop-Up Block)"
           >
             <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
             <span>Zepto ({t.zeptoEta})</span>
             <ExternalLink className="w-3 h-3 text-purple-600" />
-          </button>
+          </a>
 
-          <button
-            onClick={() => openQuickCommerceSearch('Instamart', shoppingItems[0]?.title || 'eggs')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-200 text-xs font-bold transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer"
-            title="Open Swiggy Instamart"
+          <a
+            href={getPlatformSearchUrl('Instamart', shoppingItems[0]?.title || 'eggs')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-200 text-xs font-bold transition-all shadow-xs hover:scale-102"
+            title="Open Live Swiggy Instamart (Native Link - No Pop-Up Block)"
           >
             <span className="w-2 h-2 rounded-full bg-orange-500" />
             <span>Instamart ({t.instamartEta})</span>
             <ExternalLink className="w-3 h-3 text-orange-600" />
-          </button>
+          </a>
         </div>
       </div>
 
@@ -630,20 +643,26 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
           />
           {searchQuery && (
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              <button
-                onClick={() => openQuickCommerceSearch('Zepto', searchQuery)}
-                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-100 text-purple-800 hover:bg-purple-200 cursor-pointer"
-                title="Search on Zepto"
+              <a
+                href={getPlatformSearchUrl('Zepto', searchQuery)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-100 text-purple-800 hover:bg-purple-200 cursor-pointer inline-flex items-center gap-0.5"
+                title="Search on Zepto (Direct Accessible Link)"
               >
-                Zepto
-              </button>
-              <button
-                onClick={() => openQuickCommerceSearch('Blinkit', searchQuery)}
-                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 cursor-pointer"
-                title="Search on Blinkit"
+                <span>Zepto</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <a
+                href={getPlatformSearchUrl('Blinkit', searchQuery)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 cursor-pointer inline-flex items-center gap-0.5"
+                title="Search on Blinkit (Direct Accessible Link)"
               >
-                Blinkit
-              </button>
+                <span>Blinkit</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             </div>
           )}
         </div>
@@ -710,13 +729,15 @@ export const QuickCommerceHub: React.FC<QuickCommerceHubProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => openQuickCommerceSearch(prod.platform, prod.name)}
-                    className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-purple-600 transition-colors cursor-pointer"
-                    title={`View directly on ${prod.platform}`}
+                  <a
+                    href={getPlatformSearchUrl(prod.platform, prod.name)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-purple-600 transition-colors cursor-pointer inline-flex items-center justify-center"
+                    title={`Open directly on ${prod.platform} (Accessible Link)`}
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
+                  </a>
 
                   <button
                     onClick={() => handleAddProduct(prod)}

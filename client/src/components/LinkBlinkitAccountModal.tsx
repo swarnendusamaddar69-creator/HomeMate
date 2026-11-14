@@ -368,6 +368,18 @@ export const LinkBlinkitAccountModal: React.FC<LinkBlinkitAccountModalProps> = (
                 <span>Continue to Authorization</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              <div className="pt-1 text-center">
+                <a
+                  href="https://blinkit.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-amber-800 hover:text-amber-950 font-bold underline inline-flex items-center gap-1"
+                  title="Open official Blinkit website in new tab"
+                >
+                  <span>Visit official Blinkit website ↗</span>
+                </a>
+              </div>
             </form>
           )}
         </div>

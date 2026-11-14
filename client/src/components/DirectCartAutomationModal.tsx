@@ -352,11 +352,78 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
                         </div>
                       </div>
 
-                      <div className="font-black text-slate-900 text-xs shrink-0">
-                        ₹{item.price}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-black text-slate-900 text-xs">₹{item.price}</span>
+                        <a
+                          href={
+                            item.platform === 'Blinkit'
+                              ? `https://blinkit.com/s/?q=${encodeURIComponent(item.originalTitle)}`
+                              : `https://www.zeptonow.com/search?query=${encodeURIComponent(item.originalTitle)}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-amber-50 hover:border-amber-300 text-slate-500 hover:text-amber-700 transition-colors cursor-pointer inline-flex items-center"
+                          title={`Search "${item.originalTitle}" directly on ${item.platform} (Accessible Link)`}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Direct Accessible Links Hub (Pop-up blocker proof) */}
+                <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-amber-950 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Direct Accessible Store & Cart Links</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      100% Pop-up Proof Native Links
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-900">
+                    Browser pop-up blocker preventing window.open? Click these verified direct HTML links or open in the same tab:
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    <a
+                      href="https://blinkit.com/cart"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl bg-white border border-amber-300 hover:bg-amber-100/50 text-amber-900 font-bold text-center text-[11px] flex items-center justify-center gap-1 transition-all"
+                    >
+                      <span>Blinkit Cart</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                    <a
+                      href="https://www.zeptonow.com/cart"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl bg-white border border-purple-300 hover:bg-purple-50 text-purple-900 font-bold text-center text-[11px] flex items-center justify-center gap-1 transition-all"
+                    >
+                      <span>Zepto Cart</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                    <a
+                      href="https://blinkit.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-center text-[11px] flex items-center justify-center gap-1 transition-all"
+                    >
+                      <span>Blinkit Store</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                    <a
+                      href="https://www.zeptonow.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-center text-[11px] flex items-center justify-center gap-1 transition-all"
+                    >
+                      <span>Zepto Store</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
                 </div>
 
                 {/* Price Summary Breakdown */}
@@ -390,7 +457,7 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
 
               {/* Action Buttons Footer */}
               <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <button
                     onClick={handleCopyManifest}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
@@ -407,7 +474,17 @@ export const DirectCartAutomationModal: React.FC<DirectCartAutomationModalProps>
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs transition-colors"
                     title="Open official Blinkit web cart in a new tab"
                   >
-                    <span>Open Web Cart ↗</span>
+                    <span>Blinkit Cart ↗</span>
+                  </a>
+
+                  <a
+                    href="https://www.zeptonow.com/cart"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold text-xs transition-colors"
+                    title="Open official Zepto web cart in a new tab"
+                  >
+                    <span>Zepto Cart ↗</span>
                   </a>
                 </div>
 

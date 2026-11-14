@@ -13,6 +13,7 @@ import {
   Plus,
   Minus,
   Edit3,
+  ExternalLink,
 } from 'lucide-react';
 import { exportKiranaWhatsApp } from '../utils/api';
 import { QuickCommerceHub } from './QuickCommerceHub';
@@ -234,8 +235,30 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                 title="Directly Cart to Blinkit Site"
               >
                 <Zap className="w-3.5 h-3.5 fill-white" />
-                <span>Auto-Cart to Blinkit Site</span>
+                <span>Auto-Cart to Blinkit</span>
               </button>
+
+              <a
+                href="https://blinkit.com/cart"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all shadow-xs"
+                title="Open official Blinkit cart (Native Accessible Link)"
+              >
+                <span>Blinkit Cart</span>
+                <ExternalLink className="w-3 h-3 text-amber-700" />
+              </a>
+
+              <a
+                href="https://www.zeptonow.com/cart"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-bold transition-all shadow-xs"
+                title="Open official Zepto cart (Native Accessible Link)"
+              >
+                <span>Zepto Cart</span>
+                <ExternalLink className="w-3 h-3 text-purple-600" />
+              </a>
 
               <button
                 onClick={handleCopyForQuickCommerce}
