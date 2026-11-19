@@ -332,7 +332,17 @@ export async function sendOtp(
     credentials: 'include',
     body: JSON.stringify({ email: clean, identifier: clean }),
   });
-  const data = await res.json();
+  const text = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      res.status === 404
+        ? 'OTP service endpoint is updating. Please retry in a few seconds.'
+        : `Server error (${res.status}): ${text.slice(0, 100)}`
+    );
+  }
   if (!res.ok) throw new Error(data.error || 'Failed to send OTP code');
   return data;
 }
@@ -354,7 +364,17 @@ export async function verifyOtp(
     credentials: 'include',
     body: JSON.stringify({ email: clean, identifier: clean, token: cleanToken, otp: cleanToken }),
   });
-  const data = await res.json();
+  const text = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      res.status === 404
+        ? 'OTP service endpoint is updating. Please retry.'
+        : `Server error (${res.status}): ${text.slice(0, 100)}`
+    );
+  }
   if (!res.ok) throw new Error(data.error || 'Invalid or expired OTP code');
   return {
     success: true,

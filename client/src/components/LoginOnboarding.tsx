@@ -303,24 +303,18 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     }, 350);
   };
 
-  // ─── Request Sign In OTP ───
-  const handleRequestSigninOtp = async () => {
+  // ─── Request Sign In OTP (Primary Authentication Flow) ───
+  const handleRequestSigninOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const cleanId = signinIdentifier.trim().toLowerCase();
+
     if (!cleanId) {
-      setSigninError('Please enter your email, username, or phone number first.');
+      setSigninError('Please enter your email address to receive your verification code.');
       return;
     }
 
-    const allUsers = getAllUsers();
-    const user = allUsers.find(
-      (u) =>
-        u.username.toLowerCase() === cleanId ||
-        (u.email && u.email.toLowerCase() === cleanId) ||
-        (u.phone && u.phone.includes(cleanId))
-    );
-
-    if (!user) {
-      setSigninError('No account found for this user. Please create an account.');
+    if (!cleanId.includes('@') || !cleanId.includes('.')) {
+      setSigninError('Please enter a valid email address (e.g. name@example.com).');
       return;
     }
 
@@ -328,16 +322,35 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     setSigninError(null);
 
     try {
-      const target = user.email || cleanId;
-      await sendOtp(target);
-      setPendingUser(user);
+      const allUsers = getAllUsers();
+      const existingUser = allUsers.find(
+        (u) =>
+          u.username.toLowerCase() === cleanId ||
+          (u.email && u.email.toLowerCase() === cleanId) ||
+          (u.phone && u.phone.includes(cleanId))
+      );
+
+      const candidateUser: UserAccount = existingUser || {
+        id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `u-${Date.now()}`,
+        username: cleanId.split('@')[0],
+        displayName: cleanId.split('@')[0],
+        email: cleanId,
+        role: 'admin',
+        householdId: `hh_${Date.now()}`,
+        householdName: 'My Household',
+        mode: 'family',
+        createdAt: new Date().toISOString(),
+      };
+
+      await sendOtp(cleanId);
+      setPendingUser(candidateUser);
       setOtpMode('signin');
       setOtpCode('');
       setOtpError(null);
       setShowOtpVerification(true);
       setSigninLoading(false);
     } catch (err: any) {
-      setSigninError(err.message || 'Failed to dispatch OTP. Please try password login.');
+      setSigninError(err.message || 'Failed to dispatch verification code. Please check your connection and retry.');
       setSigninLoading(false);
     }
   };
@@ -870,7 +883,14 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
         ══════════════════════════════════════════════════════════ */}
         {activeTab === 'signin' && (
           <div className="bg-white/10 backdrop-blur-xl border border-white/15 rounded-3xl p-6 sm:p-8 max-w-lg mx-auto w-full shadow-2xl space-y-6">
-            <form onSubmit={handleSignIn} className="space-y-4 text-xs">
+            <div className="text-center space-y-1">
+              <h2 className="text-lg font-black text-white">Sign In to HomeMate</h2>
+              <p className="text-xs text-slate-300">
+                Enter your registered email to receive a secure 6-digit verification code.
+              </p>
+            </div>
+
+            <form onSubmit={signinWithOtp ? handleRequestSigninOtp : handleRequestSigninOtp} className="space-y-4 text-xs">
               {signinError && (
                 <div className="p-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2.5 animate-fadeIn">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
@@ -880,87 +900,73 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
 
               <div>
                 <label className="font-bold text-slate-300 block mb-1.5">
-                  Email or Username *
+                  Email Address *
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
-                    type="text"
-                    placeholder="Enter email or username"
+                    type="email"
+                    placeholder="name@example.com"
                     value={signinIdentifier}
                     onChange={(e) => setSigninIdentifier(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white text-xs placeholder:text-slate-500"
+                    className="w-full pl-9 pr-3.5 py-3 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-white text-xs placeholder:text-slate-500"
                     required
+                    autoFocus
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="font-bold text-slate-300 block mb-1.5">
-                  Password *
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                  <input
-                    type={showSigninPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={signinPassword}
-                    onChange={(e) => setSigninPassword(e.target.value)}
-                    className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white font-mono text-xs placeholder:text-slate-500"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSigninPassword(!showSigninPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    {showSigninPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+              {/* Password option (collapsed by default, toggleable) */}
+              {signinWithOtp ? (
+                <div>
+                  <label className="font-bold text-slate-300 block mb-1.5">
+                    Account Password *
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                    <input
+                      type={showSigninPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={signinPassword}
+                      onChange={(e) => setSigninPassword(e.target.value)}
+                      className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-white font-mono text-xs placeholder:text-slate-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSigninPassword(!showSigninPassword)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      {showSigninPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rounded text-indigo-500 focus:ring-indigo-400 bg-white/10 border-white/20"
-                  />
-                  <span>Remember on this browser</span>
-                </label>
-              </div>
+              ) : null}
 
               <button
-                type="submit"
+                type="button"
+                onClick={signinWithOtp ? (e) => handleSignIn(e as any) : handleRequestSigninOtp}
                 disabled={signinLoading}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-sm shadow-xl shadow-indigo-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 mt-2"
+                className="w-full min-h-[48px] py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-black text-sm shadow-xl shadow-emerald-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
               >
                 {signinLoading ? (
-                  <span>Signing in...</span>
+                  <span>Sending 6-digit code...</span>
                 ) : (
                   <>
-                    <span>Sign In to Household Workspace</span>
+                    <span>{signinWithOtp ? 'Sign In with Password' : 'Sign In with Verification Code'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
 
-              <div className="flex items-center gap-2 my-2">
-                <div className="h-px bg-white/10 flex-1" />
-                <span className="text-[10px] text-slate-400 font-bold uppercase">or</span>
-                <div className="h-px bg-white/10 flex-1" />
+              <div className="flex items-center justify-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSigninWithOtp(!signinWithOtp)}
+                  className="text-xs text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer font-medium"
+                >
+                  {signinWithOtp ? '← Use One-Time Verification Code instead' : 'Or sign in with password →'}
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={handleRequestSigninOtp}
-                disabled={signinLoading}
-                className="w-full py-2.5 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Sign In via 6-Digit Mobile / Email OTP</span>
-              </button>
             </form>
 
             <div className="border-t border-white/10 pt-4 text-center space-y-2">

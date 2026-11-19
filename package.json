@@ -12,7 +12,10 @@
   },
   "devDependencies": {
     "@types/cookie": "^0.6.0",
-    "concurrently": "^9.1.2"
+    "@types/node": "^26.6.6",
+    "@vercel/node": "^32.0.0",
+    "concurrently": "^9.1.2",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",
