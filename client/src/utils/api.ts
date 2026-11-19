@@ -320,58 +320,73 @@ export async function deleteAccountInfo(id: string): Promise<boolean> {
   }
 }
 
-// ── Authentication & Registration with OTP ──
+// ── Authentication & Registration with Supabase OTP & Session Cookie ──
 
 export async function sendOtp(
   identifier: string
-): Promise<{ success: boolean; message: string; previewOtp?: string }> {
-  try {
-    const res = await fetch('/api/auth/send-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
-    return data;
-  } catch (err: any) {
-    console.warn('Backend send OTP fallback:', err);
-    // Offline simulation
-    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    try {
-      localStorage.setItem(`homemate_otp_${identifier.trim().toLowerCase()}`, mockOtp);
-    } catch {}
-    return {
-      success: true,
-      message: `Verification code sent to ${identifier}`,
-      previewOtp: mockOtp,
-    };
-  }
+): Promise<{ success: boolean; message: string; cooldownSeconds?: number }> {
+  const clean = identifier.trim().toLowerCase();
+  const res = await fetch('/api/otp/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email: clean, identifier: clean }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to send OTP code');
+  return data;
 }
 
 export async function verifyOtp(
   identifier: string,
-  otp: string
-): Promise<{ success: boolean; verified: boolean; message: string }> {
+  token: string
+): Promise<{
+  success: boolean;
+  verified: boolean;
+  message: string;
+  user?: { id: string; email: string; displayName?: string; householdId?: string; mode?: string };
+}> {
+  const clean = identifier.trim().toLowerCase();
+  const cleanToken = token.trim();
+  const res = await fetch('/api/otp/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email: clean, identifier: clean, token: cleanToken, otp: cleanToken }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Invalid or expired OTP code');
+  return {
+    success: true,
+    verified: true,
+    message: data.message || 'OTP verified successfully!',
+    user: data.user,
+  };
+}
+
+export async function fetchServerSession(): Promise<{
+  authenticated: boolean;
+  user?: { id: string; email: string; householdId: string; mode: string };
+}> {
   try {
-    const res = await fetch('/api/auth/verify-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier, otp }),
+    const res = await fetch('/api/auth/session', {
+      method: 'GET',
+      credentials: 'include',
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Invalid OTP');
-    return data;
-  } catch (err: any) {
-    console.warn('Backend verify OTP fallback:', err);
-    const clean = identifier.trim().toLowerCase();
-    const stored = localStorage.getItem(`homemate_otp_${clean}`);
-    if (otp.trim() === '123456' || (stored && stored === otp.trim())) {
-      localStorage.removeItem(`homemate_otp_${clean}`);
-      return { success: true, verified: true, message: 'OTP verified successfully!' };
-    }
-    throw new Error(err.message || 'Invalid or expired OTP');
+    if (!res.ok) return { authenticated: false };
+    return await res.json();
+  } catch {
+    return { authenticated: false };
   }
+}
+
+export async function logoutServerSession(): Promise<void> {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {}
 }
 
 // ── Automated Monthly Bills & Reminders API ──

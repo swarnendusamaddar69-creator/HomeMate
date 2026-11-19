@@ -59,6 +59,7 @@ import { ToastNotification, ToastMessage } from './components/ToastNotification'
 import { translations } from './utils/translations';
 import { Camera, Undo2, CheckCircle2, Sparkles } from 'lucide-react';
 import { playChimeSound } from './utils/notifications';
+import { logoutServerSession } from './utils/api';
 
 export function App() {
   // 1. Language defaults to English as requested
@@ -282,6 +283,7 @@ export function App() {
   };
 
   const handleLogout = () => {
+    logoutServerSession();
     setCurrentUserState(null);
     persistCurrentUser(null);
     setIsLoggedIn(false);

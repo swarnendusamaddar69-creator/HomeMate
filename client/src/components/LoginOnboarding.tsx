@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { translations } from '../utils/translations';
 import { sendOtp, verifyOtp } from '../utils/api';
+import { OtpInput } from './OtpInput';
 import {
   getAllUsers,
   saveAllUsers,
@@ -81,22 +82,12 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
   // ─── OTP Verification State ───
   const [showOtpVerification, setShowOtpVerification] = useState(false);
   const [otpCode, setOtpCode] = useState('');
-  const [previewOtp, setPreviewOtp] = useState('');
-  const [otpTimer, setOtpTimer] = useState(30);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpLoading, setOtpLoading] = useState(false);
   const [pendingUser, setPendingUser] = useState<UserAccount | null>(null);
   const [pendingHousehold, setPendingHousehold] = useState<Household | null>(null);
   const [isJoiningExisting, setIsJoiningExisting] = useState(false);
   const [otpMode, setOtpMode] = useState<'register' | 'signin'>('register');
-
-  useEffect(() => {
-    let interval: any = null;
-    if (showOtpVerification && otpTimer > 0) {
-      interval = setInterval(() => setOtpTimer((t) => t - 1), 1000);
-    }
-    return () => clearInterval(interval);
-  }, [showOtpVerification, otpTimer]);
 
   // Generate a cryptographically secure random access code
   const generateRandomCode = () => {
@@ -264,12 +255,10 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
       setOtpMode('register');
 
       // Dispatch real OTP via API
-      const targetIdentifier = cleanPhone || cleanEmail;
-      const otpRes = await sendOtp(targetIdentifier);
+      const targetIdentifier = cleanEmail || cleanPhone;
+      await sendOtp(targetIdentifier);
 
-      setPreviewOtp(otpRes.previewOtp || '123456');
       setOtpCode('');
-      setOtpTimer(30);
       setOtpError(null);
       setShowOtpVerification(true);
       setCreateLoading(false);
@@ -339,13 +328,11 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     setSigninError(null);
 
     try {
-      const target = user.phone || user.email || cleanId;
-      const res = await sendOtp(target);
+      const target = user.email || cleanId;
+      await sendOtp(target);
       setPendingUser(user);
       setOtpMode('signin');
-      setPreviewOtp(res.previewOtp || '123456');
       setOtpCode('');
-      setOtpTimer(30);
       setOtpError(null);
       setShowOtpVerification(true);
       setSigninLoading(false);
@@ -356,10 +343,12 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
   };
 
   // ─── Verify OTP & Finalize Registration or Login ───
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otpCode || otpCode.trim().length < 6) {
-      setOtpError('Please enter the full 6-digit OTP code.');
+  const handleVerifyOtp = async (e?: React.FormEvent, customCode?: string) => {
+    if (e) e.preventDefault();
+    const codeToVerify = (customCode || otpCode || '').trim();
+
+    if (codeToVerify.length < 6) {
+      setOtpError('Please enter the full 6-digit verification code.');
       return;
     }
 
@@ -369,40 +358,53 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     try {
       const targetIdentifier =
         otpMode === 'register'
-          ? pendingUser?.phone || pendingUser?.email || ''
-          : pendingUser?.phone || pendingUser?.email || signinIdentifier;
+          ? pendingUser?.email || pendingUser?.phone || ''
+          : pendingUser?.email || pendingUser?.phone || signinIdentifier;
 
-      const res = await verifyOtp(targetIdentifier, otpCode.trim());
+      const res = await verifyOtp(targetIdentifier, codeToVerify);
       if (!res.verified && !res.success) {
         throw new Error(res.message || 'OTP Verification failed');
       }
+
+      // If server returned a verified user profile, merge with local state
+      const verifiedHouseholdId = res.user?.householdId || pendingUser?.householdId || `hh_${Date.now()}`;
 
       if (otpMode === 'register' && pendingUser) {
         const allUsers = getAllUsers();
         const allHouseholds = getAllHouseholds();
 
+        const finalizedUser: UserAccount = {
+          ...pendingUser,
+          id: res.user?.id || pendingUser.id,
+          householdId: verifiedHouseholdId,
+        };
+
         if (pendingHousehold) {
-          saveAllHouseholds([...allHouseholds, pendingHousehold]);
+          saveAllHouseholds([...allHouseholds, { ...pendingHousehold, id: verifiedHouseholdId }]);
         } else if (isJoiningExisting) {
           const updated = allHouseholds.map((h) =>
-            h.id === pendingUser.householdId
+            h.id === verifiedHouseholdId
               ? { ...h, members: Array.from(new Set([...h.members, pendingUser.displayName])) }
               : h
           );
           saveAllHouseholds(updated);
         }
 
-        saveAllUsers([...allUsers, pendingUser]);
+        saveAllUsers([...allUsers, finalizedUser]);
         setShowOtpVerification(false);
         setOtpLoading(false);
-        onLogin(pendingUser);
+        onLogin(finalizedUser);
       } else if (otpMode === 'signin' && pendingUser) {
+        const finalizedUser: UserAccount = {
+          ...pendingUser,
+          householdId: verifiedHouseholdId,
+        };
         setShowOtpVerification(false);
         setOtpLoading(false);
-        onLogin(pendingUser);
+        onLogin(finalizedUser);
       }
     } catch (err: any) {
-      setOtpError(err.message || 'Invalid or expired OTP code. Please try again.');
+      setOtpError(err.message || 'Invalid or expired 6-digit verification code. Please try again.');
       setOtpLoading(false);
     }
   };
@@ -412,15 +414,13 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     try {
       const targetIdentifier =
         otpMode === 'register'
-          ? pendingUser?.phone || pendingUser?.email || ''
-          : pendingUser?.phone || pendingUser?.email || signinIdentifier;
+          ? pendingUser?.email || pendingUser?.phone || ''
+          : pendingUser?.email || pendingUser?.phone || signinIdentifier;
 
-      const res = await sendOtp(targetIdentifier);
-      setPreviewOtp(res.previewOtp || '123456');
-      setOtpTimer(30);
+      await sendOtp(targetIdentifier);
       setOtpError(null);
     } catch (err: any) {
-      setOtpError('Failed to resend verification code. Please try again.');
+      setOtpError(err.message || 'Failed to resend verification code. Please wait before retrying.');
     }
   };
 
@@ -1008,76 +1008,35 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
               </p>
             </div>
 
-            {/* Sandbox Live Demo Helper Banner */}
-            {previewOtp && (
-              <div className="p-3.5 rounded-2xl bg-indigo-500/15 border border-indigo-400/30 text-left flex items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5 text-[11px] font-black text-indigo-300">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Demo Mode OTP</span>
-                  </div>
-                  <p className="text-xs font-mono font-black text-white tracking-widest mt-0.5">
-                    {previewOtp}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpCode(previewOtp);
-                    setOtpError(null);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[11px] transition-colors cursor-pointer shadow-xs"
-                >
-                  Auto-fill OTP
-                </button>
-              </div>
-            )}
-
-            {/* OTP Form */}
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              {otpError && (
-                <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2 text-left animate-fadeIn">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                  <span>{otpError}</span>
-                </div>
-              )}
-
-              <div className="space-y-1 text-left">
+            {/* 6-Digit OTP Form with Auto-Submit & 48px Touch Targets */}
+            <form onSubmit={(e) => handleVerifyOtp(e)} className="space-y-6">
+              <div className="space-y-3">
                 <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block text-center">
-                  Enter 6-Digit Verification PIN
+                  Enter 6-Digit Verification Code
                 </label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  placeholder="••••••"
+                
+                <OtpInput
+                  length={6}
                   value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                  className="w-full text-center font-mono text-2xl font-black tracking-[0.6em] py-3 rounded-2xl bg-white/10 border border-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-emerald-300 placeholder:text-slate-600"
-                  autoFocus
+                  onChange={(val) => {
+                    setOtpCode(val);
+                    if (otpError) setOtpError(null);
+                  }}
+                  onComplete={(completedCode) => {
+                    handleVerifyOtp(undefined, completedCode);
+                  }}
+                  onResend={handleResendOtp}
+                  disabled={otpLoading}
+                  isLoading={otpLoading}
+                  error={otpError}
+                  resendCooldown={30}
                 />
-              </div>
-
-              {/* Countdown / Resend */}
-              <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                <span>Didn't receive the SMS/Email?</span>
-                {otpTimer > 0 ? (
-                  <span className="font-mono text-slate-500 font-bold">Resend in {otpTimer}s</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    className="text-emerald-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Resend Code</span>
-                  </button>
-                )}
               </div>
 
               <button
                 type="submit"
                 disabled={otpLoading || otpCode.length < 6}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white font-black text-sm shadow-xl shadow-emerald-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full min-h-[48px] py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white font-black text-sm shadow-xl shadow-emerald-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
               >
                 {otpLoading ? (
                   <span>Verifying code...</span>

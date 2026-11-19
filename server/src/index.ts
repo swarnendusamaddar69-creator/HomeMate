@@ -7,8 +7,12 @@ import path from 'path';
 import { z } from 'zod';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { dbService, FamilyMemberRecord, AccountInfoRecord, MonthlyBillRecord, KhataRecord } from './db.js';
+import { SupabaseOtpProvider } from './auth/supabase.js';
+import { buildSessionCookie, buildClearSessionCookie, getSessionFromCookieHeader } from './auth/session.js';
 
 dotenv.config();
+
+const otpProvider = new SupabaseOtpProvider();
 
 const fastify = Fastify({
   logger: {
@@ -276,13 +280,20 @@ const AccountCreateSchema = z.object({
 });
 
 const OtpSendSchema = z.object({
-  identifier: z.string().min(4, 'Enter a valid phone number or email address').max(100),
+  email: z.string().email().optional(),
+  identifier: z.string().min(3).max(100).optional(),
   householdId: z.string().max(128).optional(),
+}).refine(data => !!(data.email || data.identifier), {
+  message: 'Please enter a valid email address',
 });
 
 const OtpVerifySchema = z.object({
-  identifier: z.string().min(4).max(100),
-  otp: z.string().min(4).max(10),
+  email: z.string().email().optional(),
+  identifier: z.string().min(3).max(100).optional(),
+  token: z.string().min(4).max(10).optional(),
+  otp: z.string().min(4).max(10).optional(),
+}).refine(data => !!(data.email || data.identifier) && !!(data.token || data.otp), {
+  message: 'Valid email and 6-digit verification code are required',
 });
 
 const MonthlyBillCreateSchema = z.object({
@@ -812,6 +823,15 @@ fastify.post('/api/kirana/export', async (request, reply) => {
   };
 });
 
+// Helper: Resolve trusted householdId from session cookie or fallback
+function resolveHouseholdId(request: any, clientHouseholdId?: string): string {
+  const session = getSessionFromCookieHeader(request.headers.cookie);
+  if (session?.householdId) {
+    return session.householdId;
+  }
+  return clientHouseholdId || 'family_household';
+}
+
 // 7. Database Status & Statistics
 fastify.get('/api/db/status', async () => {
   return await dbService.getStatus();
@@ -819,7 +839,7 @@ fastify.get('/api/db/status', async () => {
 
 // 8. Family Members Database Routes
 fastify.get('/api/family-members', async (request) => {
-  const { householdId } = (request.query as { householdId?: string }) || {};
+  const householdId = resolveHouseholdId(request, (request.query as { householdId?: string })?.householdId);
   const members = await dbService.getFamilyMembers(householdId);
   return { success: true, count: members.length, members };
 });
@@ -830,7 +850,8 @@ fastify.post('/api/family-members', async (request, reply) => {
     return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid member details' });
   }
 
-  const member = await dbService.addFamilyMember(parseResult.data);
+  const trustedHouseholdId = resolveHouseholdId(request, parseResult.data.householdId);
+  const member = await dbService.addFamilyMember({ ...parseResult.data, householdId: trustedHouseholdId });
   return { success: true, message: `Added ${member.name} to family database`, member };
 });
 
@@ -858,7 +879,7 @@ fastify.delete('/api/family-members/:id', async (request, reply) => {
 
 // 9. Account & Financial Info Database Routes
 fastify.get('/api/accounts', async (request) => {
-  const { householdId } = (request.query as { householdId?: string }) || {};
+  const householdId = resolveHouseholdId(request, (request.query as { householdId?: string })?.householdId);
   const accounts = await dbService.getAccounts(householdId);
   return { success: true, count: accounts.length, accounts };
 });
@@ -869,7 +890,8 @@ fastify.post('/api/accounts', async (request, reply) => {
     return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid account details' });
   }
 
-  const account = await dbService.addAccount(parseResult.data);
+  const trustedHouseholdId = resolveHouseholdId(request, parseResult.data.householdId);
+  const account = await dbService.addAccount({ ...parseResult.data, householdId: trustedHouseholdId });
   return { success: true, message: `Added account for ${account.accountHolder}`, account };
 });
 
@@ -882,71 +904,104 @@ fastify.delete('/api/accounts/:id', async (request, reply) => {
   return { success: true, message: 'Account removed from database' };
 });
 
-// ── In-Memory OTP Store for Registration & Login ──
-interface OtpEntry {
-  identifier: string;
-  otp: string;
-  expiresAt: number;
-}
-const otpStore = new Map<string, OtpEntry>();
-
-// 10. Send OTP Route (Phone / Email Verification)
-fastify.post('/api/auth/send-otp', async (request, reply) => {
+// 10. Send OTP Route (Supabase Auth Email OTP)
+const handleSendOtp = async (request: any, reply: any) => {
   const parseResult = OtpSendSchema.safeParse(request.body);
   if (!parseResult.success) {
-    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Please enter a valid phone number or email address' });
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Please enter a valid email address' });
   }
 
-  const clean = parseResult.data.identifier.trim().toLowerCase();
-  // Generate 6-digit random code
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 min expiry
+  const email = (parseResult.data.email || parseResult.data.identifier || '').trim().toLowerCase();
+  
+  // Rate limit: 3 per hour per identifier and per IP
+  const clientIp = request.ip || 'unknown';
+  const ipCheck = checkRateLimit(`otp_send_ip_${clientIp}`, 3, 3600);
+  const idCheck = checkRateLimit(`otp_send_id_${email}`, 3, 3600);
 
-  otpStore.set(clean, { identifier: clean, otp, expiresAt });
+  if (!ipCheck.allowed || !idCheck.allowed) {
+    return reply.status(429).send({
+      error: 'Too many OTP requests. Please wait before trying again.',
+      retryAfterSeconds: Math.max(ipCheck.retryAfterSeconds, idCheck.retryAfterSeconds),
+    });
+  }
 
   // Redact PII in server log: log only partial masked hash
-  const maskedId = clean.length > 5 ? `${clean.slice(0, 2)}***${clean.slice(-3)}` : '***';
-  fastify.log.info({ maskedIdentifier: maskedId }, 'Dispatched authentication OTP');
+  const maskedId = email.length > 5 ? `${email.slice(0, 2)}***${email.slice(-3)}` : '***';
+  fastify.log.info({ maskedIdentifier: maskedId }, 'Dispatched authentication OTP request');
+
+  const result = await otpProvider.sendOtp(email);
 
   return {
     success: true,
-    message: `Verification code sent to ${clean}`,
-    previewOtp: otp, // surfaced for immediate seamless onboarding & demo access
-    expiresInSeconds: 300,
+    message: result.message,
+    cooldownSeconds: 30,
+  };
+};
+
+fastify.post('/api/otp/send', handleSendOtp);
+fastify.post('/api/auth/send-otp', handleSendOtp);
+
+// 11. Verify OTP Route (Supabase Auth Email OTP + Secure Cookie Issuance)
+const handleVerifyOtp = async (request: any, reply: any) => {
+  const parseResult = OtpVerifySchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Email and 6-digit verification code are required' });
+  }
+
+  const email = (parseResult.data.email || parseResult.data.identifier || '').trim().toLowerCase();
+  const token = (parseResult.data.token || parseResult.data.otp || '').trim();
+
+  const result = await otpProvider.verifyOtp(email, token);
+
+  if (!result.success || !result.user) {
+    return reply.status(400).send({
+      success: false,
+      error: result.message || 'Invalid or expired 6-digit verification code.',
+    });
+  }
+
+  // Issue httpOnly, Secure, SameSite=Lax cookie
+  if (result.sessionToken) {
+    reply.header('Set-Cookie', buildSessionCookie(result.sessionToken));
+  }
+
+  return {
+    success: true,
+    verified: true,
+    message: result.message,
+    user: result.user,
+  };
+};
+
+fastify.post('/api/otp/verify', handleVerifyOtp);
+fastify.post('/api/auth/verify-otp', handleVerifyOtp);
+
+// 12. Session Check & Logout Routes
+fastify.get('/api/auth/session', async (request, reply) => {
+  const session = getSessionFromCookieHeader(request.headers.cookie);
+  if (!session) {
+    return reply.status(401).send({ authenticated: false });
+  }
+
+  return {
+    authenticated: true,
+    user: {
+      id: session.userId,
+      email: session.email,
+      householdId: session.householdId,
+      mode: session.mode,
+    },
   };
 });
 
-// 11. Verify OTP Route
-fastify.post('/api/auth/verify-otp', async (request, reply) => {
-  const parseResult = OtpVerifySchema.safeParse(request.body);
-  if (!parseResult.success) {
-    return reply.status(400).send({ error: 'Identifier and valid OTP code are required' });
-  }
-
-  const { identifier, otp } = parseResult.data;
-  const clean = identifier.trim().toLowerCase();
-  const entry = otpStore.get(clean);
-
-  // Allow standard demo OTP 123456 or the exact generated OTP
-  if (otp.trim() === '123456' || (entry && entry.otp === otp.trim() && Date.now() <= entry.expiresAt)) {
-    otpStore.delete(clean);
-    return {
-      success: true,
-      verified: true,
-      message: 'Mobile number / Email verified successfully!',
-    };
-  }
-
-  return reply.status(400).send({
-    success: false,
-    verified: false,
-    error: 'Invalid or expired OTP. Please check the code or request a new one.',
-  });
+fastify.post('/api/auth/logout', async (_request, reply) => {
+  reply.header('Set-Cookie', buildClearSessionCookie());
+  return { success: true, message: 'Logged out successfully' };
 });
 
 // 12. Automated Monthly Bills & Reminders Routes
 fastify.get('/api/bills', async (request) => {
-  const { householdId } = (request.query as { householdId?: string }) || {};
+  const householdId = resolveHouseholdId(request, (request.query as { householdId?: string })?.householdId);
   const bills = await dbService.getMonthlyBills(householdId);
   return { success: true, count: bills.length, bills };
 });
@@ -957,7 +1012,8 @@ fastify.post('/api/bills', async (request, reply) => {
     return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid bill details' });
   }
 
-  const bill = await dbService.addMonthlyBill(parseResult.data);
+  const trustedHouseholdId = resolveHouseholdId(request, parseResult.data.householdId);
+  const bill = await dbService.addMonthlyBill({ ...parseResult.data, householdId: trustedHouseholdId });
   return { success: true, message: `Scheduled monthly reminder for ${bill.title}`, bill };
 });
 
@@ -1018,7 +1074,7 @@ fastify.post('/api/bills/pay-gateway', async (request, reply) => {
 
 // 14. Digital Khata (Hisab-Kitab Ledger) Routes
 fastify.get('/api/khata', async (request) => {
-  const { householdId } = (request.query as { householdId?: string }) || {};
+  const householdId = resolveHouseholdId(request, (request.query as { householdId?: string })?.householdId);
   const entries = await dbService.getKhataEntries(householdId);
   return { success: true, count: entries.length, entries };
 });
@@ -1029,7 +1085,8 @@ fastify.post('/api/khata', async (request, reply) => {
     return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid khata entry details' });
   }
 
-  const entry = await dbService.addKhataEntry(parseResult.data);
+  const trustedHouseholdId = resolveHouseholdId(request, parseResult.data.householdId);
+  const entry = await dbService.addKhataEntry({ ...parseResult.data, householdId: trustedHouseholdId });
   return { success: true, message: `Recorded ${entry.type === 'gave' ? 'Debit' : 'Credit'} for ${entry.partyName}`, entry };
 });
 
@@ -1058,7 +1115,13 @@ fastify.delete('/api/household/:householdId', async (request, reply) => {
     return reply.status(400).send({ error: 'Invalid householdId parameter' });
   }
 
-  const result = await dbService.deleteHouseholdData(parseResult.data.householdId);
+  const session = getSessionFromCookieHeader(request.headers.cookie);
+  const targetId = parseResult.data.householdId;
+  if (session && session.householdId !== targetId) {
+    return reply.status(403).send({ error: 'Forbidden: You cannot delete another household data' });
+  }
+
+  const result = await dbService.deleteHouseholdData(targetId);
   return {
     success: true,
     message: `All records for household ${parseResult.data.householdId} permanently removed.`,
