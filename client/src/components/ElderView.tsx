@@ -23,6 +23,9 @@ import {
   Minus,
   Phone,
   Mail,
+  Camera,
+  Sparkles,
+  Package,
 } from 'lucide-react';
 import { exportKiranaWhatsApp } from '../utils/api';
 import {
@@ -35,11 +38,21 @@ import {
 import { EditGroceryModal } from './EditGroceryModal';
 import { ElderMedsOrderHub } from './ElderMedsOrderHub';
 import { MonthlyExpenseCalculator } from './MonthlyExpenseCalculator';
+import { PrescriptionScanModal } from './PrescriptionScanModal';
+import { EditMedicineModal } from './EditMedicineModal';
 import { translations } from '../utils/translations';
 
 interface ElderViewProps {
   medicines: Medicine[];
   onUpdateMedicine: (id: string, status: 'taken' | 'skipped') => void;
+  onAddMedicine?: (med: Omit<Medicine, 'id'>) => void;
+  onEditMedicine?: (id: string, updated: Partial<Medicine>) => void;
+  onDeleteMedicine?: (id: string) => void;
+  onSchedulePrescription?: (
+    rx: Omit<Prescription, 'id'>,
+    scheduledMeds: Omit<Medicine, 'id'>[],
+    unavailMeds?: Omit<MedicineToBuy, 'id'>[]
+  ) => void;
   language: Language;
   todos: ElderTodo[];
   onToggleTodo: (id: string) => void;
@@ -66,6 +79,10 @@ interface ElderViewProps {
 export const ElderView: React.FC<ElderViewProps> = ({
   medicines,
   onUpdateMedicine,
+  onAddMedicine,
+  onEditMedicine,
+  onDeleteMedicine,
+  onSchedulePrescription,
   language,
   todos,
   onToggleTodo,
@@ -90,6 +107,11 @@ export const ElderView: React.FC<ElderViewProps> = ({
   const [newTodoText, setNewTodoText] = useState('');
   const [newTodoTime, setNewTodoTime] = useState('11:00 AM');
   const [refillRequested, setRefillRequested] = useState<string | null>(null);
+
+  // Prescription & Medication Management state
+  const [showPrescriptionScanModal, setShowPrescriptionScanModal] = useState(false);
+  const [showEditMedModal, setShowEditMedModal] = useState(false);
+  const [selectedMedToEdit, setSelectedMedToEdit] = useState<Medicine | null>(null);
 
   // Grocery List state for Elder
   const [newGroceryTitle, setNewGroceryTitle] = useState('');
@@ -850,69 +872,227 @@ export const ElderView: React.FC<ElderViewProps> = ({
 
       {/* 5. MEDICATION SCHEDULE & DOSAGE TRACKER */}
       <section className="bg-white rounded-3xl border-3 border-sky-300 p-6 sm:p-8 shadow-md space-y-6 interactive-card hover-glow-indigo">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black bg-sky-100 text-sky-800 border border-sky-300">
               <Pill className="w-4 h-4 text-sky-600" />
-              <span>{language === 'hi' ? 'दवाइयों का समय' : language === 'bn' ? 'ওষুধের সময়সূচী' : 'Medicine Schedule'}</span>
+              <span>{language === 'hi' ? 'दवाइयों का समय' : language === 'bn' ? 'ওষুধের সময়সূচী' : 'Daily Medicine Schedule'}</span>
             </div>
             <h2 className="text-2xl font-black text-slate-900 mt-1">{t.medScheduleTitle}</h2>
             <p className="text-sm text-slate-600">{t.medScheduleSubtitle}</p>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setShowPrescriptionScanModal(true)}
+              className="flex-1 sm:flex-initial min-h-[48px] px-4 py-2.5 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-black text-xs shadow-md transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              title="Scan a doctor prescription to schedule daily doses and calculate pack run-out"
+            >
+              <Camera className="w-4 h-4 text-white" />
+              <span>Scan Prescription</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedMedToEdit(null);
+                setShowEditMedModal(true);
+              }}
+              className="min-h-[48px] px-3.5 py-2.5 rounded-2xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-900 font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+              title="Add a daily medicine manually"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Med</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          {medicines.map((med) => {
-            const isTaken = med.todayStatus === 'taken';
-            const isSkipped = med.todayStatus === 'skipped';
-            const isLowStock = med.currentStock <= med.refillThreshold;
-
-            return (
-              <div
-                key={med.id}
-                className={`p-5 rounded-3xl border-2 transition-all shadow-xs ${
-                  isTaken
-                    ? 'bg-emerald-50/70 border-emerald-300'
-                    : isSkipped
-                    ? 'bg-slate-100 border-slate-300 opacity-60'
-                    : 'bg-white border-slate-300 hover:border-sky-400'
-                }`}
+          {medicines.length === 0 ? (
+            <div className="p-8 rounded-3xl border-2 border-dashed border-sky-200 bg-sky-50/50 text-center space-y-3">
+              <Pill className="w-10 h-10 text-sky-500 mx-auto" />
+              <div>
+                <h3 className="font-bold text-base text-slate-900">No daily medicines scheduled yet</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                  Tap "Scan Prescription" to automatically extract doctor orders and calculate pack run-out dates, or click "Add Med" to schedule manually.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrescriptionScanModal(true)}
+                className="min-h-[48px] px-5 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-md inline-flex items-center gap-2"
               >
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${med.pillColor}`}
-                    >
-                      <Pill className="w-7 h-7" />
-                    </div>
+                <Camera className="w-4 h-4" />
+                <span>Scan Doctor Prescription</span>
+              </button>
+            </div>
+          ) : (
+            medicines.map((med) => {
+              const isTaken = med.todayStatus === 'taken';
+              const isSkipped = med.todayStatus === 'skipped';
+              const packSize = med.packSize || 10;
+              const dailyDosage = med.dailyDosageCount || (med.scheduleTimes?.length || 1);
+              const daysRemaining = Math.max(1, Math.floor(med.currentStock / Math.max(1, dailyDosage)));
+              const runOutDate =
+                med.estimatedRunOutDate ||
+                new Date(Date.now() + daysRemaining * 86400000).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                });
+              const isLowStock = med.currentStock <= med.refillThreshold || daysRemaining <= 3;
+              const isAvailable = med.isAvailable !== false;
 
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-xl font-black text-slate-900">{med.name}</h3>
-                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
-                          {med.scheduleTimes.join(', ')}
-                        </span>
+              return (
+                <div
+                  key={med.id}
+                  className={`p-5 rounded-3xl border-2 transition-all shadow-xs space-y-4 ${
+                    isTaken
+                      ? 'bg-emerald-50/70 border-emerald-300'
+                      : isSkipped
+                      ? 'bg-slate-100 border-slate-300 opacity-60'
+                      : !isAvailable
+                      ? 'bg-amber-50/70 border-amber-300'
+                      : 'bg-white border-slate-300 hover:border-sky-400'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div
+                        className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${med.pillColor}`}
+                      >
+                        <Pill className="w-7 h-7" />
                       </div>
-                      <p className="text-base font-bold text-sky-900">{med.dosage}</p>
-                      <p className="text-sm text-slate-600">{med.instructions}</p>
 
-                      <div className="flex items-center gap-3 pt-1 text-xs font-semibold">
-                        <span className={isLowStock ? 'text-rose-600 font-bold' : 'text-slate-500'}>
-                          {language === 'hi' ? 'बची हुई गोलियां:' : language === 'bn' ? 'বাকি ওষুধ:' : 'Stock left:'} {med.currentStock}
-                        </span>
-                        {isLowStock && (
-                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold border border-rose-300">
-                            {t.lowStockAlert}
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-xl font-black text-slate-900">{med.name}</h3>
+                          <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                            {med.scheduleTimes.join(', ')}
                           </span>
+                          {!isAvailable && (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                              Out of Stock at Chemist
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-base font-bold text-sky-900">{med.dosage}</p>
+                        <p className="text-sm text-slate-600">{med.instructions}</p>
+                        {med.prescribedBy && (
+                          <p className="text-[11px] text-slate-500 font-semibold">
+                            Prescribed by: {med.prescribedBy}
+                          </p>
                         )}
                       </div>
                     </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                      {/* Edit Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMedToEdit(med);
+                          setShowEditMedModal(true);
+                        }}
+                        className="min-h-[48px] px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                        title={`Edit ${med.name} dosage, timing or pack`}
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Edit</span>
+                      </button>
+
+                      {!isTaken ? (
+                        <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                          <button
+                            type="button"
+                            onClick={() => handleMedicineAction(med.id, 'taken', med.name)}
+                            className="flex-1 sm:flex-initial min-h-[48px] px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-base shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Check className="w-5 h-5 stroke-[3]" />
+                            <span>{t.takeDoseBtn}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMedicineAction(med.id, 'skipped', med.name)}
+                            className="min-h-[48px] px-4 py-2.5 rounded-2xl border-2 border-slate-300 hover:bg-slate-100 text-slate-600 font-bold text-sm transition-colors cursor-pointer"
+                          >
+                            {t.skipDoseBtn}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-100 text-emerald-800 font-black text-sm border border-emerald-300">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          <span>{t.takenToday}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-                    {isLowStock && (
+                  {/* Pack Intelligence & Run-Out Tracker Card */}
+                  <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="text-slate-700 font-bold flex items-center gap-1.5">
+                        <Package className="w-4 h-4 text-sky-600" />
+                        <span>Pack: {packSize} Tablets ({dailyDosage} tabs/day)</span>
+                      </span>
+                      <span
+                        className={`font-black text-xs px-2.5 py-0.5 rounded-full border ${
+                          isLowStock
+                            ? 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse'
+                            : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        }`}
+                      >
+                        {med.currentStock} left • {daysRemaining} days remaining (Runs out: {runOutDate})
+                      </span>
+                    </div>
+
+                    {/* Progress Bar of Pack */}
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isLowStock ? 'bg-rose-500' : 'bg-emerald-500'
+                        }`}
+                        style={{
+                          width: `${Math.min(100, Math.max(6, (med.currentStock / packSize) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Unavailable Medicine Notice with Substitute Note */}
+                  {!isAvailable && (
+                    <div className="p-3 rounded-2xl bg-amber-100/70 border border-amber-300 text-xs text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span>
+                          <strong>Chemist Notice:</strong> {med.substituteNote || 'Substitute required. Order from pharmacy.'}
+                        </span>
+                      </div>
                       <button
+                        type="button"
+                        onClick={() => {
+                          onRefillMedicine(med);
+                          speakText(`Added substitute request for ${med.name} to shopping list.`);
+                        }}
+                        className="min-h-[40px] px-3 py-1 rounded-xl bg-amber-800 text-white font-bold text-[11px] shrink-0"
+                      >
+                        Add to Chemist Order
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Low Stock Warning Banner & Refill Action */}
+                  {isLowStock && isAvailable && (
+                    <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-rose-900 font-bold">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>
+                          Pack Running Out! Only {med.currentStock} tablets left (runs out {runOutDate})
+                        </span>
+                      </div>
+                      <button
+                        type="button"
                         onClick={() => {
                           onRefillMedicine(med);
                           setRefillRequested(med.id);
@@ -925,39 +1105,17 @@ export const ElderView: React.FC<ElderViewProps> = ({
                           );
                           setTimeout(() => setRefillRequested(null), 3000);
                         }}
-                        className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-bold border border-rose-300 transition-colors"
+                        className="min-h-[44px] px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
                       >
-                        {refillRequested === med.id ? t.refillAdded : t.orderRefillBtn}
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{refillRequested === med.id ? t.refillAdded : 'Order Chemist Refill'}</span>
                       </button>
-                    )}
-
-                    {!isTaken ? (
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <button
-                          onClick={() => handleMedicineAction(med.id, 'taken', med.name)}
-                          className="flex-1 sm:flex-initial px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-base shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <Check className="w-5 h-5 stroke-[3]" />
-                          <span>{t.takeDoseBtn}</span>
-                        </button>
-                        <button
-                          onClick={() => handleMedicineAction(med.id, 'skipped', med.name)}
-                          className="px-4 py-3 rounded-2xl border-2 border-slate-300 hover:bg-slate-100 text-slate-600 font-bold text-sm transition-colors cursor-pointer"
-                        >
-                          {t.skipDoseBtn}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-100 text-emerald-800 font-black text-sm border border-emerald-300">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                        <span>{t.takenToday}</span>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </section>
 
@@ -969,6 +1127,7 @@ export const ElderView: React.FC<ElderViewProps> = ({
         onAddMedicineToBuy={onAddMedicineToBuy}
         onUpdateMedicineStatus={onUpdateMedicineStatus}
         onDeleteMedicineToBuy={onDeleteMedicineToBuy}
+        onOpenPrescriptionScanner={() => setShowPrescriptionScanModal(true)}
         onSyncToKiranaList={(title, qty) =>
           onAddShoppingItem({
             title: `${title} (Chemist)`,
@@ -1001,6 +1160,43 @@ export const ElderView: React.FC<ElderViewProps> = ({
           language={language}
         />
       )}
+
+      {/* Prescription Scanner Modal */}
+      <PrescriptionScanModal
+        isOpen={showPrescriptionScanModal}
+        onClose={() => setShowPrescriptionScanModal(false)}
+        onSchedulePrescription={(rx, scheduledMeds, unavailMeds) => {
+          if (onSchedulePrescription) {
+            onSchedulePrescription(rx, scheduledMeds, unavailMeds);
+          } else {
+            onAddPrescription(rx);
+          }
+        }}
+        language={language}
+      />
+
+      {/* Edit Medicine Modal */}
+      <EditMedicineModal
+        isOpen={showEditMedModal}
+        onClose={() => {
+          setShowEditMedModal(false);
+          setSelectedMedToEdit(null);
+        }}
+        medicine={selectedMedToEdit}
+        onSave={(medData) => {
+          if ('id' in medData && medData.id) {
+            if (onEditMedicine) {
+              onEditMedicine(medData.id, medData);
+            }
+          } else {
+            if (onAddMedicine) {
+              onAddMedicine(medData as Omit<Medicine, 'id'>);
+            }
+          }
+        }}
+        onDelete={onDeleteMedicine}
+        language={language}
+      />
     </div>
   );
 };

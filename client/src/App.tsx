@@ -454,6 +454,68 @@ export function App() {
     });
   };
 
+  const handleAddMedicine = (med: Omit<Medicine, 'id'>) => {
+    const newMed: Medicine = {
+      ...med,
+      id: `med-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    };
+    setMedicines((prev) => [newMed, ...prev]);
+    addToast({
+      type: 'success',
+      title: 'Medicine Scheduled',
+      message: `Added ${newMed.name} to daily dosage tracker`,
+    });
+  };
+
+  const handleEditMedicine = (id: string, updated: Partial<Medicine>) => {
+    setMedicines((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...updated } : m))
+    );
+    addToast({
+      type: 'info',
+      title: 'Medicine Updated',
+      message: 'Medication schedule and pack details updated',
+    });
+  };
+
+  const handleDeleteMedicine = (id: string) => {
+    setMedicines((prev) => prev.filter((m) => m.id !== id));
+    addToast({
+      type: 'info',
+      title: 'Medicine Removed',
+      message: 'Removed from daily schedule',
+    });
+  };
+
+  const handleSchedulePrescriptionMeds = (
+    rx: Omit<Prescription, 'id'>,
+    scheduledMeds: Omit<Medicine, 'id'>[],
+    unavailMeds?: Omit<MedicineToBuy, 'id'>[]
+  ) => {
+    handleAddPrescription(rx);
+
+    const newMeds: Medicine[] = scheduledMeds.map((med, idx) => ({
+      ...med,
+      id: `med-rx-${Date.now()}-${idx}`,
+    }));
+
+    setMedicines((prev) => {
+      const existingNames = new Set(newMeds.map((n) => n.name.toLowerCase()));
+      const filteredOld = prev.filter((p) => !existingNames.has(p.name.toLowerCase()));
+      return [...newMeds, ...filteredOld];
+    });
+
+    if (unavailMeds && unavailMeds.length > 0) {
+      unavailMeds.forEach((m) => handleAddMedicineToBuy(m));
+    }
+
+    addToast({
+      type: 'success',
+      title: 'Prescription Scheduled',
+      message: `Scheduled ${newMeds.length} daily medicines from ${rx.doctorName}`,
+    });
+  };
+
   // Elder Todo Handlers
   const handleToggleElderTodo = (id: string) => {
     setElderTodos((prev) =>
@@ -844,6 +906,10 @@ export function App() {
             onAddTodo={handleAddElderTodo}
             onToggleTodoNotification={handleToggleElderTodoNotification}
             onRefillMedicine={handleRefillMedicine}
+            onAddMedicine={handleAddMedicine}
+            onEditMedicine={handleEditMedicine}
+            onDeleteMedicine={handleDeleteMedicine}
+            onSchedulePrescription={handleSchedulePrescriptionMeds}
             shoppingItems={shoppingItems}
             onToggleShoppingItem={handleToggleShoppingItem}
             onDeleteShoppingItem={handleDeleteShoppingItem}

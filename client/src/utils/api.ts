@@ -1,4 +1,4 @@
-import { ScanResponse, BackendHealth, FamilyMemberRecord, AccountInfoRecord, DatabaseStatus, MonthlyBillRecord, KhataRecord, PaymentGatewayResponse } from '../types';
+import { ScanResponse, PrescriptionScanResponse, BackendHealth, FamilyMemberRecord, AccountInfoRecord, DatabaseStatus, MonthlyBillRecord, KhataRecord, PaymentGatewayResponse } from '../types';
 
 export async function checkBackendHealth(): Promise<BackendHealth | null> {
   try {
@@ -60,6 +60,30 @@ export async function scanFridgeWithBackend(
     return await res.json();
   } catch (err) {
     console.warn('Backend fridge scan failed or offline, using fallback:', err);
+    return null;
+  }
+}
+
+export async function scanPrescriptionWithBackend(
+  fileOrBlob: Blob | File
+): Promise<PrescriptionScanResponse | null> {
+  try {
+    const formData = new FormData();
+    formData.append('photo', fileOrBlob, 'prescription_scan.jpg');
+
+    const res = await fetch('/api/scan/prescription', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      console.warn('Backend prescription scan returned non-OK status:', res.status);
+      return null;
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.warn('Backend prescription scan failed or offline, using fallback:', err);
     return null;
   }
 }

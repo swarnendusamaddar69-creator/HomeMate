@@ -36,6 +36,16 @@ export interface Medicine {
   currentStock: number;
   refillThreshold: number;
   todayStatus: 'pending' | 'taken' | 'skipped';
+  // Med pack intelligence & prescription scheduling
+  packSize?: number; // total units in pack (e.g. 10 tabs, 15 tabs, 30 capsules)
+  dailyDosageCount?: number; // pills taken per day
+  prescribedBy?: string; // doctor name / clinic
+  prescriptionId?: string;
+  isAvailable?: boolean; // false if med is unavailable at chemist
+  substituteNote?: string;
+  startDate?: string;
+  estimatedRunOutDate?: string;
+  lastRefillDate?: string;
 }
 
 export interface ElderTodo {
@@ -149,19 +159,40 @@ export interface SplitwiseDebt {
   toUpi?: string;
 }
 
+export interface PrescribedMedicineItem {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  timing?: string[]; // e.g. ["08:30 AM", "08:30 PM"]
+  beforeAfterFood?: 'before_food' | 'after_food' | 'with_food';
+  packSize?: number;
+  dailyDosageCount?: number;
+  isAvailable?: boolean;
+  substituteNote?: string;
+  pillColor?: string;
+}
+
 export interface Prescription {
   id: string;
   doctorName: string;
   clinicOrHospital: string;
   date: string;
   notes: string;
-  prescribedMedicines: {
-    name: string;
-    dosage: string;
-    frequency: string;
-    duration: string;
-  }[];
+  prescribedMedicines: PrescribedMedicineItem[];
   imageUrl?: string;
+}
+
+export interface PrescriptionScanResponse {
+  timestamp: string;
+  doctorName: string;
+  clinicOrHospital: string;
+  date: string;
+  notes?: string;
+  prescribedMedicines: PrescribedMedicineItem[];
+  isRealAi?: boolean;
+  source?: string;
+  errorNotice?: string;
 }
 
 export interface MedicineToBuy {

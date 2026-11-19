@@ -16,6 +16,7 @@ import {
   Clock,
   Phone,
   Check,
+  Camera,
 } from 'lucide-react';
 import { translations } from '../utils/translations';
 
@@ -27,6 +28,7 @@ interface ElderMedsOrderHubProps {
   onUpdateMedicineStatus: (id: string, status: 'needed' | 'ordered' | 'received') => void;
   onDeleteMedicineToBuy: (id: string) => void;
   onSyncToKiranaList: (title: string, qty: string) => void;
+  onOpenPrescriptionScanner?: () => void;
   language: Language;
 }
 
@@ -38,6 +40,7 @@ export const ElderMedsOrderHub: React.FC<ElderMedsOrderHubProps> = ({
   onUpdateMedicineStatus,
   onDeleteMedicineToBuy,
   onSyncToKiranaList,
+  onOpenPrescriptionScanner,
   language,
 }) => {
   const t = translations[language];
@@ -177,6 +180,17 @@ export const ElderMedsOrderHub: React.FC<ElderMedsOrderHubProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {onOpenPrescriptionScanner && (
+            <button
+              type="button"
+              onClick={onOpenPrescriptionScanner}
+              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-black text-xs shadow-md flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Camera className="w-4 h-4 text-white" />
+              <span>Scan Prescription</span>
+            </button>
+          )}
+
           <button
             onClick={handleWhatsAppChemist}
             className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md flex items-center gap-2 transition-all cursor-pointer"
