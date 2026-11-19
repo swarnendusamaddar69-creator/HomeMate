@@ -16,11 +16,9 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { exportKiranaWhatsApp } from '../utils/api';
-import { QuickCommerceHub } from './QuickCommerceHub';
 import { FamilyChoresHub } from './FamilyChoresHub';
 import { MonthlyExpenseCalculator } from './MonthlyExpenseCalculator';
 import { EditGroceryModal } from './EditGroceryModal';
-import { DirectCartAutomationModal } from './DirectCartAutomationModal';
 import { translations } from '../utils/translations';
 
 interface FamilyViewProps {
@@ -66,17 +64,6 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
   const [paidBills, setPaidBills] = useState<string[]>([]);
   const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
-  const [showDirectCartModal, setShowDirectCartModal] = useState(false);
-  const [directCartPlatform, setDirectCartPlatform] = useState<'Zepto' | 'Blinkit'>('Zepto');
-
-  const handleMarkAsCarted = (itemIds: string[]) => {
-    itemIds.forEach((id) => {
-      const match = shoppingItems.find((i) => i.id === id);
-      if (match && match.status === 'pending') {
-        onToggleItem(id);
-      }
-    });
-  };
 
   const t = translations[language];
 
@@ -226,40 +213,6 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => {
-                  setDirectCartPlatform('Blinkit');
-                  setShowDirectCartModal(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-black transition-all shadow-xs hover:scale-102 active:scale-95 cursor-pointer border border-amber-400/40"
-                title="Directly Cart to Blinkit Site"
-              >
-                <Zap className="w-3.5 h-3.5 fill-white" />
-                <span>Auto-Cart to Blinkit</span>
-              </button>
-
-              <a
-                href="https://blinkit.com/cart"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all shadow-xs"
-                title="Open official Blinkit cart (Native Accessible Link)"
-              >
-                <span>Blinkit Cart</span>
-                <ExternalLink className="w-3 h-3 text-amber-700" />
-              </a>
-
-              <a
-                href="https://www.zeptonow.com/cart"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-bold transition-all shadow-xs"
-                title="Open official Zepto cart (Native Accessible Link)"
-              >
-                <span>Zepto Cart</span>
-                <ExternalLink className="w-3 h-3 text-purple-600" />
-              </a>
-
               <button
                 onClick={handleCopyForQuickCommerce}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer"
@@ -486,25 +439,6 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
         familyChores={familyChores}
         currentUser={currentUser}
         householdMembers={householdMembers}
-      />
-
-      {/* 4. QUICK COMMERCE RECOMMENDATIONS & PRICE COMPARISON */}
-      <QuickCommerceHub
-        shoppingItems={shoppingItems}
-        onAddItem={onAddItem}
-        currentMode="family"
-        language={language}
-        onMarkAsBought={handleMarkAsCarted}
-      />
-
-      {/* Direct Quick Commerce Automation Modal */}
-      <DirectCartAutomationModal
-        isOpen={showDirectCartModal}
-        onClose={() => setShowDirectCartModal(false)}
-        items={shoppingItems.filter((i) => i.status === 'pending')}
-        onMarkAsCarted={handleMarkAsCarted}
-        language={language}
-        defaultPlatform={directCartPlatform}
       />
 
       {/* Edit Grocery Item Modal */}

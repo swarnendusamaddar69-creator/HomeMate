@@ -23,7 +23,6 @@ import {
   Minus,
 } from 'lucide-react';
 import { UpiPaymentModal } from './UpiPaymentModal';
-import { QuickCommerceHub } from './QuickCommerceHub';
 import { HostelSplitwise } from './HostelSplitwise';
 import { MonthlyExpenseCalculator } from './MonthlyExpenseCalculator';
 import { EditGroceryModal } from './EditGroceryModal';
@@ -91,7 +90,6 @@ export const HostelView: React.FC<HostelViewProps> = ({
   // Grocery State
   const [newSnackTitle, setNewSnackTitle] = useState('');
   const [newSnackQty, setNewSnackQty] = useState('');
-  const [showQuickCommerce, setShowQuickCommerce] = useState(false);
   const [copiedGroupToast, setCopiedGroupToast] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
   const [splitModalItem, setSplitModalItem] = useState<ShoppingItem | null>(null);
@@ -340,14 +338,6 @@ export const HostelView: React.FC<HostelViewProps> = ({
               <Share2 className="w-3.5 h-3.5" />
               <span>{t.shareToFlatWhatsApp}</span>
             </button>
-
-            <button
-              onClick={() => setShowQuickCommerce(!showQuickCommerce)}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-300" />
-              <span>{showQuickCommerce ? 'Hide Catalog' : '⚡ 10-Min Delivery'}</span>
-            </button>
           </div>
         </div>
 
@@ -525,19 +515,6 @@ export const HostelView: React.FC<HostelViewProps> = ({
             })
           )}
         </div>
-
-        {/* Quick Commerce Drawer */}
-        {showQuickCommerce && (
-          <div className="pt-2">
-            <QuickCommerceHub
-              shoppingItems={shoppingItems}
-              onAddItem={onAddShoppingItem}
-              currentMode="hostel"
-              language={language}
-              onMarkAsBought={(ids) => ids.forEach((id) => onToggleShoppingItem(id))}
-            />
-          </div>
-        )}
       </section>
 
       {/* 4. Grid: Mess Menu vs Cheap Meal & Weekly Spend */}

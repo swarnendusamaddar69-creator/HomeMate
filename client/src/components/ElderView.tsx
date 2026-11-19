@@ -32,7 +32,6 @@ import {
   requestNotificationPermission,
   triggerElderRoutineNotification,
 } from '../utils/notifications';
-import { QuickCommerceHub } from './QuickCommerceHub';
 import { EditGroceryModal } from './EditGroceryModal';
 import { ElderMedsOrderHub } from './ElderMedsOrderHub';
 import { MonthlyExpenseCalculator } from './MonthlyExpenseCalculator';
@@ -95,7 +94,6 @@ export const ElderView: React.FC<ElderViewProps> = ({
   // Grocery List state for Elder
   const [newGroceryTitle, setNewGroceryTitle] = useState('');
   const [newGroceryQty, setNewGroceryQty] = useState('1 unit');
-  const [showQuickCommerce, setShowQuickCommerce] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
 
   // Notification System state
@@ -848,31 +846,6 @@ export const ElderView: React.FC<ElderViewProps> = ({
             })
           )}
         </div>
-
-        {/* Toggle Quick Commerce Recommendations */}
-        <div className="pt-2">
-          <button
-            onClick={() => setShowQuickCommerce(!showQuickCommerce)}
-            className="w-full py-3 rounded-2xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <Zap className="w-4 h-4 text-purple-600" />
-            <span>
-              {showQuickCommerce ? t.hideQuickCommerce : t.showQuickCommerceElder}
-            </span>
-          </button>
-        </div>
-
-        {showQuickCommerce && (
-          <div className="pt-2">
-            <QuickCommerceHub
-              shoppingItems={shoppingItems}
-              onAddItem={onAddShoppingItem}
-              currentMode="elder"
-              language={language}
-              onMarkAsBought={(ids) => ids.forEach((id) => onToggleShoppingItem(id))}
-            />
-          </div>
-        )}
       </section>
 
       {/* 5. MEDICATION SCHEDULE & DOSAGE TRACKER */}
