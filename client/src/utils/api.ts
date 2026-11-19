@@ -15,7 +15,106 @@ export async function checkBackendHealth(): Promise<BackendHealth | null> {
   }
 }
 
+export function getStoredGeminiApiKey(): string | null {
+  try {
+    return localStorage.getItem('homemate_gemini_api_key') || null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredGeminiApiKey(key: string): void {
+  try {
+    if (key.trim()) {
+      localStorage.setItem('homemate_gemini_api_key', key.trim());
+    } else {
+      localStorage.removeItem('homemate_gemini_api_key');
+    }
+  } catch (err) {
+    console.warn('Failed to save key in localStorage:', err);
+  }
+}
+
+function blobToBase64(blob: Blob | File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || result;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function callGeminiVisionDirect(
+  apiKey: string,
+  prompt: string,
+  base64Image: string,
+  mimeType: string = 'image/jpeg'
+): Promise<any> {
+  const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64Image,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+        },
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errData = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errData}`);
+      }
+
+      const json = await res.json();
+      const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawText) {
+        let clean = rawText.trim();
+        if (clean.startsWith('```json')) clean = clean.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        else if (clean.startsWith('```')) clean = clean.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        return JSON.parse(clean);
+      }
+    } catch (err) {
+      lastError = err;
+      console.warn(`Direct Gemini model ${model} failed, checking next...`, err);
+    }
+  }
+  throw lastError || new Error('All Gemini vision models failed');
+}
+
 export async function getGeminiKeyConfig(): Promise<{ configured: boolean; preview: string | null }> {
+  const localKey = getStoredGeminiApiKey();
+  if (localKey) {
+    return {
+      configured: true,
+      preview: `${localKey.substring(0, 6)}...${localKey.substring(localKey.length - 4)}`,
+    };
+  }
+
   try {
     const res = await fetch('/api/config/gemini-key');
     if (!res.ok) return { configured: false, preview: null };
@@ -28,21 +127,31 @@ export async function getGeminiKeyConfig(): Promise<{ configured: boolean; previ
 export async function saveGeminiApiKey(
   apiKey: string
 ): Promise<{ success: boolean; message: string; configured: boolean }> {
+  const cleanKey = apiKey.trim();
+  setStoredGeminiApiKey(cleanKey);
+
+  // Attempt backend persistence as well
   try {
-    const res = await fetch('/api/config/gemini-key', {
+    await fetch('/api/config/gemini-key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey }),
+      body: JSON.stringify({ apiKey: cleanKey }),
     });
-    return await res.json();
-  } catch (err: any) {
-    return { success: false, message: err.message || 'Failed to save key', configured: false };
+  } catch (err) {
+    console.info('Backend key sync skipped, active in client localStorage');
   }
+
+  return {
+    success: true,
+    message: 'Gemini API key successfully saved and activated!',
+    configured: true,
+  };
 }
 
 export async function scanFridgeWithBackend(
   fileOrBlob: Blob | File
 ): Promise<(ScanResponse & { isRealAi?: boolean; notice?: string; errorNotice?: string }) | null> {
+  // 1. Try backend
   try {
     const formData = new FormData();
     formData.append('photo', fileOrBlob, 'fridge_scan.jpg');
@@ -52,21 +161,63 @@ export async function scanFridgeWithBackend(
       body: formData,
     });
 
-    if (!res.ok) {
-      console.warn('Backend scan returned non-OK status:', res.status);
-      return null;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.isRealAi) return data;
     }
-
-    return await res.json();
   } catch (err) {
-    console.warn('Backend fridge scan failed or offline, using fallback:', err);
-    return null;
+    console.warn('Backend fridge scan failed or offline, checking client direct Gemini:', err);
   }
+
+  // 2. Direct client-side Gemini Vision fallback
+  const clientKey = getStoredGeminiApiKey();
+  if (clientKey) {
+    try {
+      const base64 = await blobToBase64(fileOrBlob);
+      const prompt = `Analyze this refrigerator or pantry image. Return ONLY a valid JSON object matching:
+{
+  "detectedItems": [
+    {
+      "name": "string",
+      "localName": "string",
+      "category": "vegetables" | "dairy" | "staples" | "spices" | "snacks" | "other",
+      "level": "plenty" | "half" | "low" | "empty",
+      "confidence": number,
+      "shelfLocation": "string",
+      "isUncertain": boolean,
+      "note": "string"
+    }
+  ],
+  "suggestedShopping": [
+    { "title": "string", "quantity": "string", "reason": "string" }
+  ],
+  "recipeIdea": {
+    "title": "string",
+    "costEstimate": "string",
+    "readyInMinutes": number,
+    "ingredientsNeeded": ["string"]
+  }
+}`;
+      const parsed = await callGeminiVisionDirect(clientKey, prompt, base64, 'image/jpeg');
+      return {
+        timestamp: new Date().toISOString(),
+        detectedItems: parsed.detectedItems || [],
+        suggestedShopping: parsed.suggestedShopping || [],
+        recipeIdea: parsed.recipeIdea || null,
+        isRealAi: true,
+      };
+    } catch (directErr: any) {
+      console.warn('Direct client Gemini vision failed:', directErr);
+    }
+  }
+
+  return null;
 }
 
 export async function scanPrescriptionWithBackend(
   fileOrBlob: Blob | File
 ): Promise<PrescriptionScanResponse | null> {
+  // 1. Try backend endpoint
   try {
     const formData = new FormData();
     formData.append('photo', fileOrBlob, 'prescription_scan.jpg');
@@ -76,16 +227,60 @@ export async function scanPrescriptionWithBackend(
       body: formData,
     });
 
-    if (!res.ok) {
-      console.warn('Backend prescription scan returned non-OK status:', res.status);
-      return null;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.isRealAi) return data;
     }
-
-    return await res.json();
   } catch (err) {
-    console.warn('Backend prescription scan failed or offline, using fallback:', err);
-    return null;
+    console.warn('Backend prescription scan failed or offline, checking client direct Gemini:', err);
   }
+
+  // 2. Direct client-side Gemini Vision
+  const clientKey = getStoredGeminiApiKey();
+  if (clientKey) {
+    try {
+      const base64 = await blobToBase64(fileOrBlob);
+      const prompt = `You are a clinical AI assistant specialized in analyzing doctor prescriptions (handwritten and printed) for senior citizen care in India.
+Analyze this prescription image and return ONLY a valid JSON object matching this schema:
+{
+  "doctorName": "Doctor name with title",
+  "clinicOrHospital": "Hospital or clinic name",
+  "date": "Prescription date (e.g. 19 Nov 2026)",
+  "notes": "Doctor advice or diagnosis notes",
+  "prescribedMedicines": [
+    {
+      "name": "Medicine name (e.g. Amlodipine 5mg)",
+      "dosage": "Dosage (e.g. 1 Tablet or 5mg)",
+      "frequency": "Frequency (e.g. Once daily morning, Twice daily)",
+      "duration": "Duration (e.g. 30 days, Ongoing)",
+      "timing": ["08:30 AM", "08:30 PM"],
+      "beforeAfterFood": "after_food",
+      "packSize": 10,
+      "dailyDosageCount": 1,
+      "isAvailable": true,
+      "substituteNote": ""
+    }
+  ]
+}
+Ensure standard Indian tablet pack sizes (usually 10, 14, 15, or 30 tabs per strip). Return pure JSON only without markdown fences.`;
+
+      const parsed = await callGeminiVisionDirect(clientKey, prompt, base64, 'image/jpeg');
+      return {
+        timestamp: new Date().toISOString(),
+        doctorName: parsed.doctorName || 'Doctor Prescription',
+        clinicOrHospital: parsed.clinicOrHospital || 'Clinic',
+        date: parsed.date || new Date().toLocaleDateString('en-IN'),
+        notes: parsed.notes || 'Prescribed by doctor.',
+        prescribedMedicines: parsed.prescribedMedicines || [],
+        isRealAi: true,
+        source: 'client-gemini-vision',
+      };
+    } catch (directErr: any) {
+      console.warn('Direct client Gemini prescription vision failed:', directErr);
+    }
+  }
+
+  return null;
 }
 
 export async function executeToolAction(

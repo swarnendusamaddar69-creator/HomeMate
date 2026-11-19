@@ -17,6 +17,8 @@ import {
   RotateCcw,
   ShoppingBag,
   Share2,
+  KeyRound,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Medicine,
@@ -26,7 +28,7 @@ import {
   MedicineToBuy,
   Language,
 } from '../types';
-import { scanPrescriptionWithBackend } from '../utils/api';
+import { scanPrescriptionWithBackend, getGeminiKeyConfig, saveGeminiApiKey } from '../utils/api';
 import { speakElderReminder } from '../utils/notifications';
 
 interface PrescriptionScanModalProps {
@@ -176,6 +178,13 @@ export const PrescriptionScanModal: React.FC<PrescriptionScanModalProps> = ({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
 
+  // Gemini API Key management
+  const [geminiConfigured, setGeminiConfigured] = useState(false);
+  const [keyInput, setKeyInput] = useState('');
+  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [showKeyDrawer, setShowKeyDrawer] = useState(false);
+  const [keyPreview, setKeyPreview] = useState<string | null>(null);
+
   // Extracted Prescription State for Review
   const [doctorName, setDoctorName] = useState(PRESET_CLINICAL_PRESCRIPTIONS[0].doctorName);
   const [clinicOrHospital, setClinicOrHospital] = useState(PRESET_CLINICAL_PRESCRIPTIONS[0].clinicOrHospital);
@@ -190,6 +199,38 @@ export const PrescriptionScanModal: React.FC<PrescriptionScanModalProps> = ({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Check Gemini Key status
+  useEffect(() => {
+    if (isOpen) {
+      getGeminiKeyConfig().then((cfg) => {
+        setGeminiConfigured(cfg.configured);
+        setKeyPreview(cfg.preview);
+      });
+    }
+  }, [isOpen]);
+
+  const handleSaveApiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!keyInput.trim()) return;
+
+    setIsSavingKey(true);
+    const res = await saveGeminiApiKey(keyInput.trim());
+    setIsSavingKey(false);
+
+    if (res.success) {
+      setGeminiConfigured(true);
+      setShowKeyDrawer(false);
+      setKeyPreview(`${keyInput.trim().substring(0, 6)}...${keyInput.trim().substring(keyInput.trim().length - 4)}`);
+      setScanNotice('✓ Gemini Vision Key activated! Re-scanning prescription with AI vision...');
+
+      if (capturedBlob) {
+        await processPrescriptionScan(capturedBlob);
+      }
+    } else {
+      alert(`Error saving key: ${res.message}`);
+    }
+  };
 
   // Start/Stop camera on tab change
   useEffect(() => {
@@ -299,6 +340,11 @@ export const PrescriptionScanModal: React.FC<PrescriptionScanModalProps> = ({
           ? '✓ AI Vision Scan Complete: Extracted medicines, timings & pack sizes.'
           : '✓ Prescription scanned (Clinical template verified).'
       );
+    } else {
+      setScanNotice(
+        'AI Vision requires a Gemini API key. Please connect your Gemini API Key above to enable live OCR & prescription recognition.'
+      );
+      setShowKeyDrawer(true);
     }
   };
 
@@ -478,45 +524,134 @@ export const PrescriptionScanModal: React.FC<PrescriptionScanModalProps> = ({
             Scan doctor prescriptions with AI vision. Automatically schedules doses, calculates pack run-out dates, alerts for refills, and handles unavailable medicines.
           </p>
 
-          {/* Scanner Mode Tabs */}
-          <div className="flex items-center gap-2 mt-4">
+          {/* Scanner Mode Tabs & AI Key Button */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('preset')}
+                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'preset'
+                    ? 'bg-white text-sky-950 shadow-md'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                Clinical Presets
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('camera')}
+                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'camera'
+                    ? 'bg-white text-sky-950 shadow-md'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Live Camera</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('upload')}
+                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'upload'
+                    ? 'bg-white text-sky-950 shadow-md'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload Image / Rx</span>
+              </button>
+            </div>
+
             <button
               type="button"
-              onClick={() => setActiveTab('preset')}
-              className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'preset'
-                  ? 'bg-white text-sky-950 shadow-md'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
+              onClick={() => setShowKeyDrawer(!showKeyDrawer)}
+              className={`min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
+                geminiConfigured
+                  ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30'
+                  : 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-lg animate-pulse hover:bg-amber-300'
               }`}
+              title="Configure Gemini API Key for direct Vision OCR in browser"
             >
-              Clinical Presets
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('camera')}
-              className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'camera'
-                  ? 'bg-white text-sky-950 shadow-md'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              <Camera className="w-3.5 h-3.5" />
-              <span>Live Camera</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('upload')}
-              className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'upload'
-                  ? 'bg-white text-sky-950 shadow-md'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>Upload Image / Rx</span>
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>{geminiConfigured ? `AI Vision Active (${keyPreview})` : 'Connect Gemini Key'}</span>
             </button>
           </div>
         </div>
+
+        {/* Gemini API Key Configuration Drawer */}
+        {showKeyDrawer && (
+          <div className="bg-slate-900 border-b border-sky-900 p-4 sm:p-5 text-white animate-fadeIn shrink-0">
+            <div className="max-w-2xl mx-auto space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <h4 className="text-sm font-bold text-white">Google Gemini Multimodal Vision API Key</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowKeyDrawer(false)}
+                  className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-white flex items-center justify-center rounded-lg"
+                  aria-label="Close API Key Drawer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                HomeMate uses Google Gemini 2.0 / 1.5 Flash Vision to recognize doctor prescriptions, medicine names, schedules, and pack sizes directly inside your browser. Your key is stored securely in your local browser storage.
+              </p>
+
+              <form onSubmit={handleSaveApiKey} className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="password"
+                    value={keyInput}
+                    onChange={(e) => setKeyInput(e.target.value)}
+                    placeholder="Paste Gemini API key (starts with AIzaSy...)"
+                    className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 min-h-[48px]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSavingKey || !keyInput.trim()}
+                    className="min-h-[48px] px-5 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {isSavingKey ? 'Verifying...' : 'Save & Activate'}
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 pt-1">
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-300 hover:underline flex items-center gap-1 min-h-[44px]"
+                  >
+                    <span>Get a free Gemini API key from Google AI Studio</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+
+                  {geminiConfigured && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await saveGeminiApiKey('');
+                        setGeminiConfigured(false);
+                        setKeyPreview(null);
+                        setKeyInput('');
+                        setShowKeyDrawer(false);
+                      }}
+                      className="text-rose-400 hover:underline cursor-pointer min-h-[44px] flex items-center"
+                    >
+                      Disconnect key
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Content Area */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-slate-800">
@@ -557,6 +692,24 @@ export const PrescriptionScanModal: React.FC<PrescriptionScanModalProps> = ({
 
           {activeTab === 'camera' && (
             <div className="space-y-3">
+              {!geminiConfigured && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="font-medium">
+                      Camera AI vision requires a Google Gemini API Key.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyDrawer(true)}
+                    className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shrink-0 cursor-pointer shadow-xs"
+                  >
+                    Connect Key
+                  </button>
+                </div>
+              )}
+
               <div className="relative rounded-2xl overflow-hidden bg-slate-900 aspect-video flex items-center justify-center border border-slate-800">
                 {cameraError ? (
                   <div className="text-center p-4 text-rose-300 space-y-2">
@@ -602,6 +755,24 @@ export const PrescriptionScanModal: React.FC<PrescriptionScanModalProps> = ({
 
           {activeTab === 'upload' && (
             <div className="space-y-3">
+              {!geminiConfigured && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="font-medium">
+                      Upload AI vision requires a Google Gemini API Key.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyDrawer(true)}
+                    className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shrink-0 cursor-pointer shadow-xs"
+                  >
+                    Connect Key
+                  </button>
+                </div>
+              )}
+
               <label
                 htmlFor="rx-upload-input"
                 className="border-2 border-dashed border-sky-300 hover:border-sky-500 rounded-3xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer bg-sky-50/50 hover:bg-sky-50 transition-all text-center min-h-[160px]"
