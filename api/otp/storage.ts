@@ -31,13 +31,76 @@ export function hashOtp(code: string): string {
 
 export function timingSafeCompare(a: string, b: string): boolean {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const bufA = Buffer.from(a, 'hex');
-  const bufB = Buffer.from(b, 'hex');
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-// Upstash Redis helper using native fetch
+// ─── Stateless HMAC-Signed Challenge Token for Serverless Multi-Instance Resilience ───
+export function createOtpChallengeToken(email: string, plainCode: string): string {
+  const now = Date.now();
+  const payload = {
+    email: email.toLowerCase().trim(),
+    hash: hashOtp(plainCode),
+    attempts: 0,
+    maxAttempts: MAX_VERIFY_ATTEMPTS,
+    expiresAt: now + OTP_TTL_MS,
+    createdAt: now,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', OTP_HASH_SECRET).update(encoded).digest('base64url');
+  return `${encoded}.${signature}`;
+}
+
+export function updateOtpChallengeAttempts(challengeToken: string): string | null {
+  try {
+    const [encoded, signature] = challengeToken.split('.');
+    if (!encoded || !signature) return null;
+    const expectedSig = crypto.createHmac('sha256', OTP_HASH_SECRET).update(encoded).digest('base64url');
+    if (!timingSafeCompare(signature, expectedSig)) return null;
+
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    payload.attempts += 1;
+    const newEncoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const newSignature = crypto.createHmac('sha256', OTP_HASH_SECRET).update(newEncoded).digest('base64url');
+    return `${newEncoded}.${newSignature}`;
+  } catch {
+    return null;
+  }
+}
+
+export function verifyOtpChallengeToken(
+  challengeToken: string,
+  email: string
+): { valid: boolean; record?: StoredOtpRecord; error?: string } {
+  try {
+    const [encoded, signature] = challengeToken.split('.');
+    if (!encoded || !signature) {
+      return { valid: false, error: 'Malformed challenge token' };
+    }
+
+    const expectedSig = crypto.createHmac('sha256', OTP_HASH_SECRET).update(encoded).digest('base64url');
+    if (!timingSafeCompare(signature, expectedSig)) {
+      return { valid: false, error: 'Invalid challenge signature' };
+    }
+
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    if (payload.email !== email.toLowerCase().trim()) {
+      return { valid: false, error: 'Challenge was issued for a different account.' };
+    }
+
+    if (Date.now() > payload.expiresAt) {
+      return { valid: false, error: 'Verification code has expired. Please request a new code.' };
+    }
+
+    return { valid: true, record: payload };
+  } catch (err) {
+    return { valid: false, error: 'Failed to verify challenge' };
+  }
+}
+
+// ─── Upstash Redis helper using native fetch ───
 async function upstashRequest(command: string[]): Promise<any> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;

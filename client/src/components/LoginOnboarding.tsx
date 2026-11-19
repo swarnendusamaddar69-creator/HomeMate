@@ -1008,7 +1008,7 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
                 We've dispatched a 6-digit verification code to{' '}
                 <span className="text-white font-bold">
-                  {pendingUser?.phone || pendingUser?.email || signinIdentifier}
+                  {pendingUser?.email || pendingUser?.phone || signinIdentifier}
                 </span>
               </p>
             </div>

@@ -320,11 +320,12 @@ export async function deleteAccountInfo(id: string): Promise<boolean> {
   }
 }
 
-// ── Authentication & Registration with Supabase OTP & Session Cookie ──
+// ── Authentication & Registration with Serverless OTP & Session Cookie ──
+let lastChallengeToken: string | null = null;
 
 export async function sendOtp(
   identifier: string
-): Promise<{ success: boolean; message: string; cooldownSeconds?: number }> {
+): Promise<{ success: boolean; message: string; cooldownSeconds?: number; challengeToken?: string }> {
   const clean = identifier.trim().toLowerCase();
   let res: Response;
 
@@ -361,6 +362,9 @@ export async function sendOtp(
   }
 
   if (!res.ok) throw new Error(data.error || 'Failed to send OTP code');
+  if (data.challengeToken) {
+    lastChallengeToken = data.challengeToken;
+  }
   return data;
 }
 
@@ -382,7 +386,13 @@ export async function verifyOtp(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email: clean, identifier: clean, token: cleanToken, otp: cleanToken }),
+      body: JSON.stringify({
+        email: clean,
+        identifier: clean,
+        token: cleanToken,
+        otp: cleanToken,
+        challengeToken: lastChallengeToken || undefined,
+      }),
     });
 
     if (res.status === 404) {
@@ -390,7 +400,13 @@ export async function verifyOtp(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email: clean, identifier: clean, token: cleanToken, otp: cleanToken }),
+        body: JSON.stringify({
+          email: clean,
+          identifier: clean,
+          token: cleanToken,
+          otp: cleanToken,
+          challengeToken: lastChallengeToken || undefined,
+        }),
       });
     }
   } catch (err: any) {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import crypto from 'crypto';
-import { checkRateLimit, recordSend, storeOtp } from './storage.js';
+import { checkRateLimit, recordSend, storeOtp, createOtpChallengeToken } from './storage.js';
 import { getEmailAdapter } from './email-adapter.js';
 
 const SendOtpSchema = z.object({
@@ -59,14 +59,16 @@ export default async function handler(req: any, res: any) {
   }
 
   // ─── 6-Digit Cryptographic Code Generation ───
-  // crypto.randomInt ensures unbiased, cryptographically strong random generation
   const code = crypto.randomInt(100000, 1000000).toString();
 
   // Store HMAC-SHA256 hash in storage (Upstash Redis or in-memory fallback, 5-minute TTL)
   await storeOtp(email, code);
   await recordSend(email, ip);
 
-  // ─── Dispatch via Email Provider Adapter ───
+  // Generate stateless HMAC challenge token for serverless resilience
+  const challengeToken = createOtpChallengeToken(email, code);
+
+  // ─── Dispatch via Email Provider Adapter (SMTP / Resend) ───
   const emailAdapter = getEmailAdapter();
   const dispatchResult = await emailAdapter.sendOtp(email, code);
 
@@ -79,10 +81,19 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  // Never return or log the code
+  // Set httpOnly challenge cookie so verify can read it automatically across any serverless instance
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  const secureFlag = isProd ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `homemate_otp_challenge=${challengeToken}; HttpOnly${secureFlag}; SameSite=Lax; Path=/; Max-Age=300`
+  );
+
+  // Never return or log the raw OTP code
   return res.status(200).json({
     success: true,
     message: `A 6-digit verification code has been dispatched to ${email}.`,
     cooldownSeconds: 30,
+    challengeToken,
   });
 }
