@@ -7,18 +7,13 @@ import {
   Compass,
   AlertTriangle,
   RefreshCw,
-  Heart,
-  GraduationCap,
-  Users,
 } from 'lucide-react';
-import { AppMode } from '../types';
 
 interface NotFoundPageProps {
   type?: '404' | 'server_error';
   errorMessage?: string;
   onReturnHome: () => void;
   onRetry?: () => void;
-  onSelectMode?: (mode: AppMode) => void;
 }
 
 export const NotFoundPage: React.FC<NotFoundPageProps> = ({
@@ -26,7 +21,6 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
   errorMessage,
   onReturnHome,
   onRetry,
-  onSelectMode,
 }) => {
   const isServerError = type === 'server_error';
 
@@ -83,49 +77,6 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
             <span>Return to Household Dashboard</span>
           </button>
         </div>
-
-        {/* Switch Household Wings */}
-        {onSelectMode && (
-          <div className="pt-4 border-t border-slate-100">
-            <p className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wider">
-              Or jump directly to a household interface:
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => {
-                  onSelectMode('family');
-                  onReturnHome();
-                }}
-                className="p-3 rounded-2xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-center cursor-pointer group"
-              >
-                <Users className="w-5 h-5 text-emerald-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-extrabold text-slate-800 block">Family OS</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onSelectMode('elder');
-                  onReturnHome();
-                }}
-                className="p-3 rounded-2xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 transition-all text-center cursor-pointer group"
-              >
-                <Heart className="w-5 h-5 text-amber-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-extrabold text-slate-800 block">Elder Care</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onSelectMode('hostel');
-                  onReturnHome();
-                }}
-                className="p-3 rounded-2xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all text-center cursor-pointer group"
-              >
-                <GraduationCap className="w-5 h-5 text-indigo-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-extrabold text-slate-800 block">Hostel Flat</span>
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Support Helpdesk with Clickable Phone & Email */}
         <div className="pt-4 border-t border-slate-100 bg-slate-50 p-4 rounded-2xl text-xs text-slate-600 space-y-2">

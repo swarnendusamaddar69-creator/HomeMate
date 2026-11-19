@@ -750,7 +750,6 @@ export function App() {
           window.history.pushState(null, '', '/');
           setCurrentPath('/');
         }}
-        onSelectMode={handleSelectMode}
       />
     );
   }
@@ -767,7 +766,6 @@ export function App() {
           setCurrentPath('/');
         }}
         onRetry={() => setServerError(null)}
-        onSelectMode={handleSelectMode}
       />
     );
   }
@@ -961,13 +959,8 @@ export function App() {
         )}
       </main>
 
-      {/* Footer with clickable phone number in description at bottom, clickable email, links */}
-      <Footer
-        currentMode={currentMode}
-        onOpenDatabase={() => setIsDatabaseModalOpen(true)}
-        onOpenWidgets={() => setIsWidgetModalOpen(true)}
-        onSelectMode={handleSelectMode}
-      />
+      {/* Minimal, elegant Footer with 24/7 Helpline */}
+      <Footer currentMode={currentMode} />
 
       {/* Family Members & Account Info Database Modal */}
       <FamilyDatabaseModal
