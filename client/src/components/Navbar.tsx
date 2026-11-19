@@ -468,18 +468,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Support Phone & Email in Mobile Drawer */}
           <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
             <a
-              href="tel:+918001234567"
+              href="tel:+917439542543"
               className="text-emerald-700 font-bold hover:underline flex items-center gap-1"
             >
               <Phone className="w-3 h-3" />
-              <span>+91 800-123-4567</span>
+              <span>+91 74395 42543</span>
             </a>
             <a
-              href="mailto:support@homemate.ai"
+              href="mailto:swarnendusamaddar69@gmail.com"
               className="text-emerald-700 font-bold hover:underline flex items-center gap-1"
             >
               <Mail className="w-3 h-3" />
-              <span>support@homemate.ai</span>
+              <span>swarnendusamaddar69@gmail.com</span>
             </a>
           </div>
 

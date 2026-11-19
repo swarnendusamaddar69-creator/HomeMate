@@ -92,21 +92,21 @@ export const Footer: React.FC<FooterProps> = ({
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-500 text-[11px]">Helpline:</span>
                   <a
-                    href="tel:+918001234567"
+                    href="tel:+917439542543"
                     className="text-emerald-700 hover:text-emerald-800 hover:underline inline-flex items-center gap-1"
                   >
-                    <span>+91 800-123-4567</span>
+                    <span>+91 74395 42543</span>
                   </a>
                 </div>
 
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-500 text-[11px]">Support Email:</span>
                   <a
-                    href="mailto:support@homemate.ai"
+                    href="mailto:swarnendusamaddar69@gmail.com"
                     className="text-emerald-700 hover:text-emerald-800 hover:underline inline-flex items-center gap-1"
                   >
                     <Mail className="w-3 h-3" />
-                    <span>support@homemate.ai</span>
+                    <span>swarnendusamaddar69@gmail.com</span>
                   </a>
                 </div>
               </div>
@@ -223,17 +223,17 @@ export const Footer: React.FC<FooterProps> = ({
 
           <div className="flex items-center gap-5 text-xs">
             <a
-              href="mailto:contact@homemate.ai"
+              href="mailto:swarnendusamaddar69@gmail.com"
               className="hover:text-emerald-600 hover:underline transition-colors"
             >
-              contact@homemate.ai
+              swarnendusamaddar69@gmail.com
             </a>
             <span>•</span>
             <a
-              href="tel:+918001234567"
+              href="tel:+917439542543"
               className="hover:text-emerald-600 hover:underline transition-colors font-medium"
             >
-              +91 800-123-4567
+              +91 74395 42543
             </a>
           </div>
         </div>

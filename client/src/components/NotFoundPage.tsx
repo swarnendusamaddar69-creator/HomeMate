@@ -103,19 +103,19 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
           </div>
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-semibold">
             <a
-              href="mailto:support@homemate.ai"
+              href="mailto:swarnendusamaddar69@gmail.com"
               className="text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1"
             >
               <Mail className="w-3.5 h-3.5" />
-              <span>support@homemate.ai</span>
+              <span>swarnendusamaddar69@gmail.com</span>
             </a>
             <span className="text-slate-300">•</span>
             <a
-              href="tel:+918001234567"
+              href="tel:+917439542543"
               className="text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1"
             >
               <Phone className="w-3.5 h-3.5" />
-              <span>+91 800-123-4567</span>
+              <span>+91 74395 42543</span>
             </a>
           </div>
         </div>

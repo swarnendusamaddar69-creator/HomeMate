@@ -133,6 +133,7 @@ export interface Household {
   name: string;
   mode: AppMode;
   accessCode: string;
+  accessCodeExpiresAt?: string; // 72-hour security expiration timestamp
   adminUsername: string;
   members: string[]; // list of usernames or display names
   city?: string;

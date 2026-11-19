@@ -332,74 +332,25 @@ export const FridgeScanModal: React.FC<FridgeScanModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowKeyDrawer(!showKeyDrawer)}
-              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
-                geminiConfigured
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30 hover:bg-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-300 border-amber-400/40 hover:bg-amber-500/30 animate-pulse'
-              }`}
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>{geminiConfigured ? 'AI Key Connected' : 'Connect Gemini Key'}</span>
-            </button>
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border bg-emerald-500/20 text-emerald-300 border-emerald-400/30 font-bold">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Server-Side AI Vision Secured</span>
+            </span>
 
             <button
               onClick={() => {
                 stopCamera();
                 onClose();
               }}
-              className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors"
+              className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+              aria-label="Close modal"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Gemini API Key Drawer / Configuration Notice */}
-        {(showKeyDrawer || (!geminiConfigured && customImage)) && (
-          <div className="bg-amber-50 border-b border-amber-200 p-4 shrink-0 transition-all animate-fadeIn">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
-                  <KeyRound className="w-4 h-4 text-amber-600" />
-                  <span>Connect Google Gemini Vision to Read Your Real Pictures</span>
-                </div>
-                <p className="text-xs text-amber-900 leading-relaxed">
-                  HomeMate uses Google Gemini 1.5 Flash Vision to inspect pictures. Without an API key,
-                  it uses realistic sample data. Getting a key is 100% free and takes 30 seconds:
-                </p>
-              </div>
 
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0"
-              >
-                <span>Get Free Key (Google AI Studio)</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-
-            <form onSubmit={handleSaveApiKey} className="flex gap-2 mt-3">
-              <input
-                type="password"
-                placeholder="Paste your Gemini API key (AIzaSy...)"
-                value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-                className="flex-1 text-xs px-3.5 py-2.5 rounded-xl border border-amber-300 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
-              />
-              <button
-                type="submit"
-                disabled={isSavingKey}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
-              >
-                {isSavingKey ? 'Activating...' : 'Save & Analyze'}
-              </button>
-            </form>
-          </div>
-        )}
 
         {/* Modal Body */}
         <div className="p-6 space-y-6 overflow-y-auto">

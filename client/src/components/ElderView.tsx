@@ -449,11 +449,11 @@ export const ElderView: React.FC<ElderViewProps> = ({
 
           <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             <a
-              href="tel:+918001234567"
+              href="tel:+917439542543"
               className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-sm transition-all"
             >
               <Phone className="w-4 h-4" />
-              <span>Call Care Concierge (+91 800-123-4567)</span>
+              <span>Call Care Concierge (+91 74395 42543)</span>
             </a>
             <a
               href="tel:112"
@@ -463,11 +463,11 @@ export const ElderView: React.FC<ElderViewProps> = ({
               <span>Emergency 112</span>
             </a>
             <a
-              href="mailto:support@homemate.ai"
+              href="mailto:swarnendusamaddar69@gmail.com"
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 font-extrabold text-xs transition-all"
             >
               <Mail className="w-3.5 h-3.5" />
-              <span>support@homemate.ai</span>
+              <span>swarnendusamaddar69@gmail.com</span>
             </a>
           </div>
         </div>

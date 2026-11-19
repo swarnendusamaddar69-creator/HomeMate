@@ -411,4 +411,31 @@ export const dbService = {
     writeFileDb(db);
     return db.khataEntries.length < initLen;
   },
+
+  // ── Household Data Purge / Erasure ──
+  async deleteHouseholdData(householdId: string): Promise<{
+    deletedMembers: number;
+    deletedAccounts: number;
+    deletedBills: number;
+    deletedKhata: number;
+  }> {
+    const db = readFileDb();
+    const origM = (db.familyMembers || []).length;
+    const origA = (db.accounts || []).length;
+    const origB = (db.bills || []).length;
+    const origK = (db.khataEntries || []).length;
+
+    db.familyMembers = (db.familyMembers || []).filter((m) => m.householdId !== householdId);
+    db.accounts = (db.accounts || []).filter((a) => a.householdId !== householdId);
+    db.bills = (db.bills || []).filter((b) => b.householdId !== householdId);
+    db.khataEntries = (db.khataEntries || []).filter((k) => k.householdId !== householdId);
+
+    writeFileDb(db);
+    return {
+      deletedMembers: origM - (db.familyMembers || []).length,
+      deletedAccounts: origA - (db.accounts || []).length,
+      deletedBills: origB - (db.bills || []).length,
+      deletedKhata: origK - (db.khataEntries || []).length,
+    };
+  },
 };

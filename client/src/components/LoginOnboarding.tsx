@@ -98,13 +98,14 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
     return () => clearInterval(interval);
   }, [showOtpVerification, otpTimer]);
 
-  // Generate a random clean access code on mount
+  // Generate a cryptographically secure random access code
   const generateRandomCode = () => {
-    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const numbers = '23456789';
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const array = new Uint8Array(4);
+    crypto.getRandomValues(array);
     let code = 'HM';
-    for (let i = 0; i < 4; i++) {
-      code += (i % 2 === 0 ? letters : numbers)[Math.floor(Math.random() * (i % 2 === 0 ? letters.length : numbers.length))];
+    for (let i = 0; i < array.length; i++) {
+      code += chars[array[i] % chars.length];
     }
     return code;
   };
@@ -195,14 +196,17 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
           return;
         }
 
-        finalHouseholdId = `hh_${Date.now()}`;
+        finalHouseholdId = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `hh_${Date.now()}`;
         finalHouseholdName = cleanHName;
+
+        const accessCodeExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(); // 72-hour expiration
 
         preparedHousehold = {
           id: finalHouseholdId,
           name: cleanHName,
           mode: selectedMode,
           accessCode: cleanCode,
+          accessCodeExpiresAt,
           adminUsername: cleanUsername,
           members: [cleanFullName],
           city: city.trim() || undefined,
@@ -220,6 +224,12 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
           return;
         }
 
+        if (existingH.accessCodeExpiresAt && new Date(existingH.accessCodeExpiresAt).getTime() < Date.now()) {
+          setCreateError(`Household invite code "${cleanJoin}" has expired (valid for 72 hours). Please ask your household admin to generate a new invite code.`);
+          setCreateLoading(false);
+          return;
+        }
+
         finalHouseholdId = existingH.id;
         finalHouseholdName = existingH.name;
         finalHouseholdMode = existingH.mode;
@@ -229,7 +239,7 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
 
       // Create new user account candidate
       const newUser: UserAccount = {
-        id: `u-${Date.now()}`,
+        id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `u-${Date.now()}`,
         username: cleanUsername,
         displayName: cleanFullName,
         email: cleanEmail,

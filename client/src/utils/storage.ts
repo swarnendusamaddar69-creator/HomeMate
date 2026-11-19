@@ -148,3 +148,54 @@ export function getStoredAccounts(): AccountInfoRecord[] {
 export function saveStoredAccounts(accounts: AccountInfoRecord[]): void {
   saveStoredData('accounts_v3', accounts);
 }
+
+// ── Complete Permanent Household Data Erasure ──
+export function deleteAllHouseholdData(householdId: string): void {
+  try {
+    // 1. Remove household from household list
+    const households = getAllHouseholds().filter((h) => h.id !== householdId);
+    saveAllHouseholds(households);
+
+    // 2. If current user belongs to this household, clear current user session
+    const currentUser = getCurrentUser();
+    if (currentUser && currentUser.householdId === householdId) {
+      setCurrentUser(null);
+    }
+
+    // 3. Clear all household-scoped localStorage keys
+    const specificKeys = [
+      `homemate_shopping_v4_${householdId}`,
+      `homemate_shopping_v3_${householdId}`,
+      `homemate_pantry_${householdId}`,
+      `homemate_elder_meds_${householdId}`,
+      `homemate_prescriptions_${householdId}`,
+      `homemate_meds_to_buy_${householdId}`,
+      `homemate_family_chores_${householdId}`,
+      `homemate_hostel_chores_${householdId}`,
+      `homemate_hostel_expenses_${householdId}`,
+      `homemate_mess_menu_${householdId}`,
+      `homemate_elder_todos_${householdId}`,
+      `homemate_household_members_${householdId}`,
+      `homemate_dismissed_shopping_${householdId}`,
+      `homemate_pantry_last_levels_${householdId}`,
+      `homemate_khata_${householdId}`,
+      `homemate_bills_${householdId}`,
+      `homemate_accounts_${householdId}`,
+      `homemate_family_${householdId}`,
+    ];
+
+    specificKeys.forEach((k) => localStorage.removeItem(k));
+
+    // 4. Scan any remaining keys containing the householdId
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.includes(householdId)) {
+        toRemove.push(key);
+      }
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (err) {
+    console.error('Failed to wipe household local data:', err);
+  }
+}

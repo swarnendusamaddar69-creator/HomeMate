@@ -4,25 +4,138 @@ import multipart from '@fastify/multipart';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import { z } from 'zod';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { dbService, FamilyMemberRecord, AccountInfoRecord, MonthlyBillRecord, KhataRecord } from './db.js';
 
 dotenv.config();
 
 const fastify = Fastify({
-  logger: true,
+  logger: {
+    // Redact sensitive authorization headers and body fields from logs
+    redact: ['req.headers.authorization', 'req.headers.cookie'],
+  },
 });
 
-// Register plugins
+// Production & local development origins whitelist
+const ALLOWED_ORIGINS = new Set([
+  'https://home-mate-zeta.vercel.app',
+  ...(process.env.NODE_ENV !== 'production'
+    ? ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:4000', 'http://localhost:4173']
+    : []),
+]);
+
 await fastify.register(cors, {
-  origin: true,
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.has(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error('CORS policy: Origin not allowed'), false);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
 });
 
 await fastify.register(multipart, {
   limits: {
-    fileSize: 15 * 1024 * 1024, // 15MB photo upload limit
+    fileSize: 5 * 1024 * 1024, // 5MB photo upload security limit
   },
+});
+
+// ── In-Memory Token-Bucket Rate Limiter (Per IP & Per Household) ──
+interface RateBucket {
+  count: number;
+  resetAt: number;
+}
+const rateLimitMap = new Map<string, RateBucket>();
+
+// Periodic cleanup of expired rate limit entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateLimitMap.entries()) {
+    if (bucket.resetAt <= now) {
+      rateLimitMap.delete(key);
+    }
+  }
+}, 60000);
+
+function checkRateLimit(key: string, limit: number, windowMs = 60000): { allowed: boolean; remaining: number; retryAfterSeconds: number } {
+  const now = Date.now();
+  const bucket = rateLimitMap.get(key);
+
+  if (!bucket || bucket.resetAt <= now) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, remaining: limit - 1, retryAfterSeconds: 0 };
+  }
+
+  if (bucket.count >= limit) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    return { allowed: false, remaining: 0, retryAfterSeconds };
+  }
+
+  bucket.count += 1;
+  return { allowed: true, remaining: limit - bucket.count, retryAfterSeconds: 0 };
+}
+
+// Rate limit preHandler hook
+fastify.addHook('preHandler', async (request, reply) => {
+  const clientIp = request.ip || '127.0.0.1';
+  const householdId = (request.headers['x-household-id'] as string) || '';
+
+  // AI Endpoints: Strict limit of 15 requests per minute
+  if (request.url.startsWith('/api/vision') || request.url.startsWith('/api/chat') || request.url.startsWith('/api/scan/')) {
+    const ipCheck = checkRateLimit(`ai:ip:${clientIp}`, 15, 60000);
+    if (!ipCheck.allowed) {
+      return reply.status(429).send({
+        error: 'Too many AI requests. Please wait a minute before scanning or chatting again.',
+        retryAfterSeconds: ipCheck.retryAfterSeconds,
+      });
+    }
+
+    if (householdId) {
+      const hhCheck = checkRateLimit(`ai:hh:${householdId}`, 15, 60000);
+      if (!hhCheck.allowed) {
+        return reply.status(429).send({
+          error: 'Household AI quota exceeded for this minute. Please try again soon.',
+          retryAfterSeconds: hhCheck.retryAfterSeconds,
+        });
+      }
+    }
+  } else if (request.url.startsWith('/api/')) {
+    // General API Endpoints: 120 requests per minute
+    const ipCheck = checkRateLimit(`api:ip:${clientIp}`, 120, 60000);
+    if (!ipCheck.allowed) {
+      return reply.status(429).send({
+        error: 'Too many requests. Please slow down.',
+        retryAfterSeconds: ipCheck.retryAfterSeconds,
+      });
+    }
+  }
+});
+
+// Global Secure Error Handler: Zero Stack Traces Leaked & No Sensitive Data Logged
+fastify.setErrorHandler((error, request, reply) => {
+  const err = error as any;
+  // Safe minimal logging without PII or user input payloads
+  fastify.log.error({
+    method: request.method,
+    url: request.url,
+    statusCode: err?.statusCode || 500,
+    type: err?.name || 'Error',
+  });
+
+  const statusCode = err?.statusCode && err.statusCode >= 400 && err.statusCode < 600 ? err.statusCode : 500;
+  const safeMessage = statusCode === 429
+    ? 'Rate limit exceeded. Please try again later.'
+    : statusCode < 500
+      ? err?.message || 'Invalid request'
+      : 'An unexpected internal error occurred. Please try again.';
+
+  return reply.status(statusCode).send({
+    error: safeMessage,
+    statusCode,
+  });
 });
 
 // In-Memory Action Log for Reversible Undo Actions
@@ -55,75 +168,198 @@ fastify.get('/api/health', async () => {
   };
 });
 
-// 2. Gemini API Key Configuration Routes
-fastify.get('/api/config/gemini-key', async () => {
-  const key = process.env.GEMINI_API_KEY || '';
-  return {
-    configured: !!key,
-    preview: key ? `${key.substring(0, 6)}...${key.substring(key.length - 4)}` : null,
-  };
+// ── Zod Schemas for API Requests & Gemini Responses ──
+const ChatRequestSchema = z.object({
+  message: z.string().min(1, 'Message is required').max(1000, 'Message cannot exceed 1000 characters'),
+  householdId: z.string().max(128).optional(),
 });
 
-fastify.post('/api/config/gemini-key', async (request, reply) => {
-  const { apiKey } = (request.body as { apiKey: string }) || {};
-
-  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 10) {
-    return reply.status(400).send({ error: 'Please provide a valid Gemini API key' });
-  }
-
-  const cleanKey = apiKey.trim();
-  process.env.GEMINI_API_KEY = cleanKey;
-
-  // Persist to .env file in server root
-  try {
-    let envContent = '';
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, 'utf8');
-      if (envContent.includes('GEMINI_API_KEY=')) {
-        envContent = envContent.replace(/GEMINI_API_KEY=.*/g, `GEMINI_API_KEY=${cleanKey}`);
-      } else {
-        envContent += `\nGEMINI_API_KEY=${cleanKey}\n`;
-      }
-    } else {
-      envContent = `PORT=4000\nGEMINI_API_KEY=${cleanKey}\n`;
-    }
-    fs.writeFileSync(envPath, envContent, 'utf8');
-  } catch (err) {
-    fastify.log.warn({ err }, 'Could not write to .env file, key stored in memory');
-  }
-
-  return {
-    success: true,
-    configured: true,
-    message: 'Google Gemini API Key successfully saved and activated!',
-    preview: `${cleanKey.substring(0, 6)}...${cleanKey.substring(cleanKey.length - 4)}`,
-  };
+const VisionRequestSchema = z.object({
+  imageBase64: z.string().min(1, 'imageBase64 is required').max(7 * 1024 * 1024, 'Image exceeds maximum 5MB limit'),
+  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/heic']).default('image/jpeg'),
+  task: z.enum(['fridge', 'prescription']).default('fridge'),
+  prompt: z.string().max(2000, 'Prompt cannot exceed 2000 characters').optional(),
+  householdId: z.string().max(128).optional(),
 });
 
-// 3. Real Multimodal Fridge & Pantry Vision Scan
-fastify.post('/api/scan/fridge', async (request, reply) => {
+const FridgeDetectedItemSchema = z.object({
+  name: z.string().min(1).default('Unknown Item'),
+  localName: z.string().optional().default(''),
+  category: z.enum(['vegetables', 'dairy', 'staples', 'spices', 'snacks', 'other']).catch('other'),
+  level: z.enum(['low', 'half', 'plenty', 'empty']).catch('half'),
+  confidence: z.number().min(0).max(1).catch(0.85),
+  shelfLocation: z.string().optional().default('Main Compartment'),
+  isUncertain: z.boolean().optional().default(false),
+  note: z.string().optional().default(''),
+});
+
+const SuggestedShoppingSchema = z.object({
+  title: z.string().min(1),
+  quantity: z.string().optional().default('1 pack'),
+  reason: z.string().optional().default('Restock suggestion'),
+});
+
+const RecipeIdeaSchema = z.object({
+  title: z.string().default('Home Style Sabzi'),
+  costEstimate: z.string().default('₹50'),
+  readyInMinutes: z.number().default(20),
+  ingredientsNeeded: z.array(z.string()).default([]),
+}).nullable().optional();
+
+const FridgeVisionResponseSchema = z.object({
+  detectedItems: z.array(FridgeDetectedItemSchema).default([]),
+  suggestedShopping: z.array(SuggestedShoppingSchema).default([]),
+  recipeIdea: RecipeIdeaSchema,
+});
+
+const PrescribedMedicineSchema = z.object({
+  name: z.string().min(1).default('Prescribed Medicine'),
+  dosage: z.string().default('1 Dose'),
+  frequency: z.string().default('Once daily'),
+  duration: z.string().default('7 days'),
+  timing: z.array(z.string()).default(['08:30 AM']),
+  beforeAfterFood: z.enum(['before_food', 'after_food', 'with_food', 'empty_stomach']).catch('after_food'),
+  packSize: z.number().int().positive().catch(10),
+  dailyDosageCount: z.number().positive().catch(1),
+  isAvailable: z.boolean().catch(true),
+  substituteNote: z.string().optional().default(''),
+});
+
+const PrescriptionVisionResponseSchema = z.object({
+  doctorName: z.string().catch('Dr. Consulting Physician'),
+  clinicOrHospital: z.string().catch('Clinic / Hospital'),
+  date: z.string().catch(() => new Date().toLocaleDateString('en-IN')),
+  notes: z.string().catch(''),
+  prescribedMedicines: z.array(PrescribedMedicineSchema).default([]),
+});
+
+const ActionExecuteSchema = z.object({
+  tool: z.string().min(1).max(100),
+  payload: z.record(z.any()).default({}),
+});
+
+const KiranaExportSchema = z.object({
+  items: z.array(
+    z.object({
+      title: z.string().min(1).max(100),
+      quantity: z.string().max(50),
+    })
+  ).min(1, 'At least 1 item is required'),
+  language: z.enum(['en', 'hi', 'bn']).default('en'),
+  address: z.string().max(300).optional(),
+});
+
+const FamilyMemberCreateSchema = z.object({
+  householdId: z.string().max(128).default('family_household'),
+  name: z.string().min(1, 'Name is required').max(100),
+  relationship: z.string().max(50).default('Family Member'),
+  email: z.string().email().or(z.literal('')).default(''),
+  phone: z.string().max(25).default(''),
+  accountNumber: z.string().max(50).default(''),
+  upiId: z.string().max(60).default(''),
+  bankName: z.string().max(100).default(''),
+  ifscCode: z.string().max(25).default(''),
+  emergencyContact: z.boolean().default(false),
+  notes: z.string().max(500).default(''),
+});
+
+const AccountCreateSchema = z.object({
+  householdId: z.string().max(128).default('family_household'),
+  userId: z.string().max(128).default(''),
+  accountHolder: z.string().min(1, 'Account holder name is required').max(100),
+  accountType: z.enum(['bank', 'upi', 'card', 'wallet']).default('upi'),
+  accountNumberOrId: z.string().min(1, 'Account number or UPI ID is required').max(100),
+  bankOrProvider: z.string().max(100).default('Bank / UPI'),
+  ifscOrHandle: z.string().max(50).default(''),
+  isPrimary: z.boolean().default(false),
+  notes: z.string().max(500).default(''),
+});
+
+const OtpSendSchema = z.object({
+  identifier: z.string().min(4, 'Enter a valid phone number or email address').max(100),
+  householdId: z.string().max(128).optional(),
+});
+
+const OtpVerifySchema = z.object({
+  identifier: z.string().min(4).max(100),
+  otp: z.string().min(4).max(10),
+});
+
+const MonthlyBillCreateSchema = z.object({
+  householdId: z.string().max(128).default('family_household'),
+  title: z.string().min(1, 'Bill title is required').max(100),
+  category: z.enum(['rent', 'electricity', 'wifi', 'gas', 'salary', 'maintenance', 'water', 'subscription', 'medical', 'groceries', 'other']).default('other'),
+  amount: z.number().positive('Amount must be positive'),
+  dueDay: z.number().int().min(1).max(31).default(5),
+  autoReminder: z.boolean().default(true),
+  billerAccount: z.string().max(100).default(''),
+  notes: z.string().max(500).default(''),
+});
+
+const BillPayGatewaySchema = z.object({
+  billId: z.string().max(100).optional(),
+  billerName: z.string().min(1).max(100),
+  amount: z.number().positive('Invalid payment amount'),
+  paymentMethod: z.enum(['upi', 'card', 'netbanking', 'bbps']).default('upi'),
+  details: z.record(z.any()).default({}),
+});
+
+const KhataCreateSchema = z.object({
+  householdId: z.string().max(128).default('family_household'),
+  partyName: z.string().min(1, 'Vendor or party name is required').max(100),
+  partyPhone: z.string().max(25).default(''),
+  partyRole: z.enum(['kirana', 'milkman', 'subziwala', 'domestic_help', 'flatmate', 'technician', 'other']).default('kirana'),
+  type: z.enum(['gave', 'got']).default('gave'),
+  amount: z.number().positive('Amount must be positive'),
+  description: z.string().max(500).default('Household calculation entry'),
+  date: z.string().max(50).default(() => new Date().toISOString().split('T')[0]),
+  upiId: z.string().max(60).default(''),
+});
+
+const DeleteHouseholdParamsSchema = z.object({
+  householdId: z.string().min(1, 'householdId is required').max(128),
+});
+
+// 2. Server-Side AI Chat Proxy Route (Secure server-side execution)
+fastify.post('/api/chat', async (request, reply) => {
+  const parseResult = ChatRequestSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({
+      error: parseResult.error.issues[0]?.message || 'Invalid chat request',
+    });
+  }
+
+  const { message } = parseResult.data;
+  const cleanMessage = message.trim();
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return reply.status(200).send({
+      reply: 'HomeMate Assistant (offline mode): Your household data is safely stored locally. Configure server GEMINI_API_KEY for live AI responses.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
-    const data = await request.file();
-    if (!data) {
-      return reply.status(400).send({ error: 'No image file uploaded' });
-    }
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    const prompt = `You are HomeMate Assistant, a smart, empathetic Indian household AI. Keep responses concise, clear, and plain text without markdown headers or code fences. User message: ${cleanMessage}`;
+    const result = await model.generateContent(prompt);
+    const replyText = result.response.text().trim();
+    return reply.status(200).send({
+      reply: replyText,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return reply.status(200).send({
+      reply: 'I received your request. Let me know if you need help with chores, bills, or groceries.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
 
-    const buffer = await data.toBuffer();
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    // REAL GOOGLE GEMINI VISION SCAN
-    if (apiKey) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        // Use gemini-3-flash-preview for high-speed, modern multimodal vision
-        let model = genAI.getGenerativeModel({
-          model: 'gemini-3-flash-preview',
-          generationConfig: {
-            responseMimeType: 'application/json',
-          },
-        });
-
-        const prompt = `You are HomeMate Multimodal Household Vision AI.
+// 3. Unified Server-Side AI Vision Proxy & Handlers
+const FRIDGE_VISION_PROMPT = `You are HomeMate Multimodal Household Vision AI.
 Carefully inspect this uploaded photo of a refrigerator, pantry, countertop, or food items.
 Detect all visible items (fruits, vegetables, dairy, drinks, bread, snacks, spices, packaged foods, steel dabbas/containers).
 For each item:
@@ -164,129 +400,7 @@ Return ONLY a valid JSON object matching this schema:
   }
 }`;
 
-        const candidateModels = [
-          'gemini-3-flash-preview',
-          'gemini-3.8-flash',
-          'gemini-3.5-flash',
-          'gemini-3.1-flash-lite',
-          'gemini-flash-lite-latest',
-        ];
-
-        let result: any = null;
-        let successfulModel = '';
-        let lastError: any = null;
-
-        for (const modelName of candidateModels) {
-          try {
-            const m = genAI.getGenerativeModel({
-              model: modelName,
-              generationConfig: {
-                responseMimeType: 'application/json',
-              },
-            });
-
-            result = await m.generateContent([
-              prompt,
-              {
-                inlineData: {
-                  data: buffer.toString('base64'),
-                  mimeType: data.mimetype || 'image/jpeg',
-                },
-              },
-            ]);
-
-            if (result && result.response) {
-              successfulModel = modelName;
-              break;
-            }
-          } catch (err: any) {
-            lastError = err;
-            console.warn(`Model ${modelName} encountered error (${err.status || err.message}), trying next candidate...`);
-          }
-        }
-
-        if (!result) {
-          throw lastError || new Error('All candidate vision models failed to respond');
-        }
-
-        let text = result.response.text().trim();
-        if (text.startsWith('```json')) {
-          text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (text.startsWith('```')) {
-          text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        const parsed = JSON.parse(text);
-
-        return reply.status(200).send({
-          timestamp: new Date().toISOString(),
-          source: `${successfulModel}-vision`,
-          isRealAi: true,
-          detectedItems: parsed.detectedItems || [],
-          suggestedShopping: parsed.suggestedShopping || [],
-          recipeIdea: parsed.recipeIdea || null,
-        });
-      } catch (geminiError: any) {
-        console.error('Detailed Gemini Vision API error:', geminiError);
-        return reply.status(200).send({
-          timestamp: new Date().toISOString(),
-          source: 'gemini-error-fallback',
-          isRealAi: false,
-          errorNotice: `Gemini API Error: ${geminiError.message || 'Failed to call Gemini'}. Showing fallback detection.`,
-          detectedItems: getRealisticFallbackItems(),
-          suggestedShopping: [
-            { title: 'Milk', quantity: '1 packet', reason: 'Low stock detected' },
-            { title: 'Fresh Produce', quantity: '1 kg', reason: 'Restock needed' },
-          ],
-          recipeIdea: {
-            title: 'Simple Vegetable Stir-Fry & Toast',
-            costEstimate: '₹35 total',
-            readyInMinutes: 10,
-            ingredientsNeeded: ['Vegetables', 'Bread', 'Butter', 'Spices'],
-          },
-        });
-      }
-    }
-
-    // Fallback when no Gemini API key is configured yet
-    return reply.status(200).send({
-      timestamp: new Date().toISOString(),
-      source: 'simulation-engine',
-      isRealAi: false,
-      notice: 'Gemini API Key not configured. Add your key to enable live AI vision recognition.',
-      detectedItems: getRealisticFallbackItems(),
-      suggestedShopping: [
-        { title: 'Amul Milk', quantity: '1 packet', reason: 'Fridge scan: low level detected' },
-        { title: 'Tomatoes', quantity: '1 kg', reason: 'Fridge scan: only 2 left in crisper' },
-      ],
-      recipeIdea: {
-        title: 'Quick Dahi Aloo & Paratha',
-        costEstimate: '₹42 total',
-        readyInMinutes: 15,
-        ingredientsNeeded: ['Potatoes', 'Curd', 'Green Chillies', 'Spices'],
-      },
-    });
-  } catch (err: any) {
-    fastify.log.error(err);
-    return reply.status(500).send({ error: 'Failed to process fridge scan', message: err.message });
-  }
-});
-
-// 3.5 Real Multimodal Prescription Vision Scan
-fastify.post('/api/scan/prescription', async (request, reply) => {
-  try {
-    const data = await request.file();
-    if (!data) {
-      return reply.status(400).send({ error: 'No prescription file uploaded' });
-    }
-
-    const buffer = await data.toBuffer();
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (apiKey) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const prompt = `You are a clinical AI assistant specialized in analyzing doctor prescriptions (handwritten and printed) for senior citizen care in India.
+const PRESCRIPTION_VISION_PROMPT = `You are a clinical AI assistant specialized in analyzing doctor prescriptions (handwritten and printed) for senior citizen care in India.
 Analyze this prescription image and return ONLY a valid JSON object matching this schema:
 {
   "doctorName": "Doctor name with title",
@@ -310,72 +424,130 @@ Analyze this prescription image and return ONLY a valid JSON object matching thi
 }
 Ensure standard Indian tablet pack sizes (usually 10, 14, 15, or 30 tabs per strip). Return pure JSON only without markdown fences.`;
 
-        const candidateModels = [
-          'gemini-3-flash-preview',
-          'gemini-3.8-flash',
-          'gemini-3.5-flash',
-          'gemini-3.1-flash-lite',
-          'gemini-flash-lite-latest',
-        ];
+const CANDIDATE_GEMINI_MODELS = [
+  'gemini-3-flash-preview',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+];
 
-        let result: any = null;
-        let successfulModel = '';
+async function processVisionTask(
+  buffer: Buffer,
+  mimeType: string,
+  task: 'fridge' | 'prescription'
+) {
+  const apiKey = process.env.GEMINI_API_KEY;
 
-        for (const modelName of candidateModels) {
-          try {
-            const m = genAI.getGenerativeModel({
-              model: modelName,
-              generationConfig: {
-                responseMimeType: 'application/json',
-              },
-            });
+  if (apiKey) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const prompt = task === 'fridge' ? FRIDGE_VISION_PROMPT : PRESCRIPTION_VISION_PROMPT;
+      let result: any = null;
+      let successfulModel = '';
 
-            result = await m.generateContent([
-              prompt,
-              {
-                inlineData: {
-                  data: buffer.toString('base64'),
-                  mimeType: data.mimetype || 'image/jpeg',
-                },
-              },
-            ]);
-
-            if (result && result.response) {
-              successfulModel = modelName;
-              break;
-            }
-          } catch (err: any) {
-            console.warn(`Prescription model ${modelName} error (${err.message}), trying next...`);
-          }
-        }
-
-        if (result && result.response) {
-          let text = result.response.text().trim();
-          if (text.startsWith('```json')) {
-            text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          } else if (text.startsWith('```')) {
-            text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
-          }
-
-          const parsed = JSON.parse(text);
-          return reply.status(200).send({
-            timestamp: new Date().toISOString(),
-            source: `${successfulModel}-rx-vision`,
-            isRealAi: true,
-            doctorName: parsed.doctorName || 'Dr. Arvind Mehta (MD, DM)',
-            clinicOrHospital: parsed.clinicOrHospital || 'Fortis Escorts Heart Institute',
-            date: parsed.date || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-            notes: parsed.notes || 'Take with water. Regular BP monitoring advised.',
-            prescribedMedicines: parsed.prescribedMedicines || getRealisticFallbackRxMeds(),
+      for (const modelName of CANDIDATE_GEMINI_MODELS) {
+        try {
+          const m = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              responseMimeType: 'application/json',
+            },
           });
-        }
-      } catch (geminiError: any) {
-        console.error('Gemini prescription scan error:', geminiError);
-      }
-    }
 
-    // High-fidelity clinical fallback
-    return reply.status(200).send({
+          result = await m.generateContent([
+            prompt,
+            {
+              inlineData: {
+                data: buffer.toString('base64'),
+                mimeType: mimeType || 'image/jpeg',
+              },
+            },
+          ]);
+
+          if (result && result.response) {
+            successfulModel = modelName;
+            break;
+          }
+        } catch (err: any) {
+          // Fallback to next candidate
+        }
+      }
+
+      if (result && result.response) {
+        let text = result.response.text().trim();
+        if (text.startsWith('```json')) {
+          text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (text.startsWith('```')) {
+          text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        const parsed = JSON.parse(text);
+
+        if (task === 'fridge') {
+          const validated = FridgeVisionResponseSchema.safeParse(parsed);
+          const data = validated.success
+            ? validated.data
+            : { detectedItems: getRealisticFallbackItems(), suggestedShopping: [], recipeIdea: null };
+
+          return {
+            timestamp: new Date().toISOString(),
+            source: `${successfulModel}-fridge-proxy`,
+            isRealAi: validated.success,
+            detectedItems: data.detectedItems,
+            suggestedShopping: data.suggestedShopping,
+            recipeIdea: data.recipeIdea,
+          };
+        } else {
+          const validated = PrescriptionVisionResponseSchema.safeParse(parsed);
+          const data = validated.success
+            ? validated.data
+            : {
+                doctorName: 'Dr. Arvind Mehta (MD, DM)',
+                clinicOrHospital: 'Fortis Escorts Heart Institute',
+                date: new Date().toLocaleDateString('en-IN'),
+                notes: 'Take with water. Regular BP monitoring advised.',
+                prescribedMedicines: getRealisticFallbackRxMeds(),
+              };
+
+          return {
+            timestamp: new Date().toISOString(),
+            source: `${successfulModel}-rx-proxy`,
+            isRealAi: validated.success,
+            doctorName: data.doctorName,
+            clinicOrHospital: data.clinicOrHospital,
+            date: data.date,
+            notes: data.notes,
+            prescribedMedicines: data.prescribedMedicines,
+          };
+        }
+      }
+    } catch (geminiError: any) {
+      fastify.log.warn({ msg: 'Gemini vision proxy fallback triggered' });
+    }
+  }
+
+  // Safe fallback when unconfigured or offline
+  if (task === 'fridge') {
+    return {
+      timestamp: new Date().toISOString(),
+      source: 'simulation-engine',
+      isRealAi: false,
+      notice: 'Server Gemini proxy in fallback mode.',
+      detectedItems: getRealisticFallbackItems(),
+      suggestedShopping: [
+        { title: 'Amul Milk', quantity: '1 packet', reason: 'Fridge scan: low level detected' },
+        { title: 'Bread Loaf', quantity: '1 pack', reason: 'Breakfast essential: check freshness' },
+      ],
+      recipeIdea: {
+        title: 'Aloo Tamatar Quick Sabzi & Toast',
+        costEstimate: '₹40 - ₹60',
+        readyInMinutes: 15,
+        ingredientsNeeded: ['Tomatoes', 'Potatoes', 'Basic Spices'],
+      },
+    };
+  } else {
+    return {
       timestamp: new Date().toISOString(),
       source: 'clinical-rx-simulation',
       isRealAi: false,
@@ -384,10 +556,83 @@ Ensure standard Indian tablet pack sizes (usually 10, 14, 15, or 30 tabs per str
       date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
       notes: 'Prescribed for Essential Hypertension & Type-2 Diabetes management. Take after food.',
       prescribedMedicines: getRealisticFallbackRxMeds(),
-    });
+    };
+  }
+}
+
+// Unified Vision Proxy Endpoint
+fastify.post('/api/vision', async (request, reply) => {
+  try {
+    let buffer: Buffer | null = null;
+    let mimetype = 'image/jpeg';
+    let task: 'fridge' | 'prescription' = 'fridge';
+
+    if (request.isMultipart()) {
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send({ error: 'No image uploaded' });
+      }
+      buffer = await data.toBuffer();
+      mimetype = data.mimetype || 'image/jpeg';
+      const query = request.query as { task?: string };
+      if (query?.task === 'prescription' || (data.fields?.task as any)?.value === 'prescription') {
+        task = 'prescription';
+      }
+    } else {
+      const parseResult = VisionRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        return reply.status(400).send({
+          error: parseResult.error.issues[0]?.message || 'Invalid vision request payload',
+        });
+      }
+
+      const body = parseResult.data;
+      buffer = Buffer.from(body.imageBase64, 'base64');
+      mimetype = body.mimeType;
+      task = body.task;
+    }
+
+    if (!buffer || buffer.length === 0) {
+      return reply.status(400).send({ error: 'Uploaded image file cannot be empty' });
+    }
+
+    if (buffer.length > 5 * 1024 * 1024) {
+      return reply.status(413).send({ error: 'Image exceeds maximum allowed size of 5MB' });
+    }
+
+    const result = await processVisionTask(buffer, mimetype, task);
+    return reply.status(200).send(result);
   } catch (err: any) {
-    fastify.log.error(err);
-    return reply.status(500).send({ error: 'Failed to process prescription scan', message: err.message });
+    return reply.status(500).send({ error: 'Failed to process vision scan' });
+  }
+});
+
+// Legacy delegate endpoints
+fastify.post('/api/scan/fridge', async (request, reply) => {
+  try {
+    const data = await request.file();
+    if (!data) {
+      return reply.status(400).send({ error: 'No image file uploaded' });
+    }
+    const buffer = await data.toBuffer();
+    const result = await processVisionTask(buffer, data.mimetype || 'image/jpeg', 'fridge');
+    return reply.status(200).send(result);
+  } catch (err: any) {
+    return reply.status(500).send({ error: 'Failed to process fridge scan' });
+  }
+});
+
+fastify.post('/api/scan/prescription', async (request, reply) => {
+  try {
+    const data = await request.file();
+    if (!data) {
+      return reply.status(400).send({ error: 'No prescription file uploaded' });
+    }
+    const buffer = await data.toBuffer();
+    const result = await processVisionTask(buffer, data.mimetype || 'image/jpeg', 'prescription');
+    return reply.status(200).send(result);
+  } catch (err: any) {
+    return reply.status(500).send({ error: 'Failed to process prescription scan' });
   }
 });
 
@@ -495,8 +740,13 @@ function getRealisticFallbackItems() {
 
 // 4. Safe Reversible Tool Action Dispatcher
 fastify.post('/api/actions/execute', async (request, reply) => {
-  const body = request.body as { tool: string; payload: Record<string, any> };
-  const undoToken = `undo_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const parseResult = ActionExecuteSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid tool execution payload' });
+  }
+
+  const body = parseResult.data;
+  const undoToken = `undo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
   const logEntry: ActionLogEntry = {
     token: undoToken,
@@ -518,7 +768,10 @@ fastify.post('/api/actions/execute', async (request, reply) => {
 
 // 5. Undo Tool Action
 fastify.post('/api/actions/undo', async (request, reply) => {
-  const { undoToken } = request.body as { undoToken: string };
+  const { undoToken } = (request.body as { undoToken?: string }) || {};
+  if (!undoToken || typeof undoToken !== 'string') {
+    return reply.status(400).send({ error: 'undoToken is required' });
+  }
   const entry = actionLog.find((item) => item.token === undoToken);
 
   if (!entry) {
@@ -534,13 +787,13 @@ fastify.post('/api/actions/undo', async (request, reply) => {
 });
 
 // 6. WhatsApp Kirana Message Formatter
-fastify.post('/api/kirana/export', async (request) => {
-  const { items, language, address } = request.body as {
-    items: { title: string; quantity: string }[];
-    language?: 'en' | 'hi' | 'bn';
-    address?: string;
-  };
+fastify.post('/api/kirana/export', async (request, reply) => {
+  const parseResult = KiranaExportSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid kirana export items' });
+  }
 
+  const { items, language, address } = parseResult.data;
   const lines = items.map((i, idx) => `${idx + 1}. ${i.title} - ${i.quantity}`);
   const deliveryAddress = address || 'Flat 402, Green Valley Apartments';
 
@@ -572,32 +825,22 @@ fastify.get('/api/family-members', async (request) => {
 });
 
 fastify.post('/api/family-members', async (request, reply) => {
-  const body = request.body as Partial<FamilyMemberRecord>;
-  if (!body.name || !body.name.trim()) {
-    return reply.status(400).send({ error: 'Family member name is required' });
+  const parseResult = FamilyMemberCreateSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid member details' });
   }
 
-  const member = await dbService.addFamilyMember({
-    householdId: body.householdId || 'family_household',
-    name: body.name.trim(),
-    relationship: body.relationship?.trim() || 'Family Member',
-    email: body.email?.trim() || '',
-    phone: body.phone?.trim() || '',
-    accountNumber: body.accountNumber?.trim() || '',
-    upiId: body.upiId?.trim() || '',
-    bankName: body.bankName?.trim() || '',
-    ifscCode: body.ifscCode?.trim() || '',
-    emergencyContact: !!body.emergencyContact,
-    notes: body.notes?.trim() || '',
-  });
-
+  const member = await dbService.addFamilyMember(parseResult.data);
   return { success: true, message: `Added ${member.name} to family database`, member };
 });
 
 fastify.put('/api/family-members/:id', async (request, reply) => {
   const { id } = request.params as { id: string };
-  const body = request.body as Partial<FamilyMemberRecord>;
-  const updated = await dbService.updateFamilyMember(id, body);
+  const parseResult = FamilyMemberCreateSchema.partial().safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid member update payload' });
+  }
+  const updated = await dbService.updateFamilyMember(id, parseResult.data);
   if (!updated) {
     return reply.status(404).send({ error: 'Family member not found' });
   }
@@ -621,26 +864,12 @@ fastify.get('/api/accounts', async (request) => {
 });
 
 fastify.post('/api/accounts', async (request, reply) => {
-  const body = request.body as Partial<AccountInfoRecord>;
-  if (!body.accountHolder || !body.accountHolder.trim()) {
-    return reply.status(400).send({ error: 'Account holder name is required' });
-  }
-  if (!body.accountNumberOrId || !body.accountNumberOrId.trim()) {
-    return reply.status(400).send({ error: 'Account number or UPI ID is required' });
+  const parseResult = AccountCreateSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid account details' });
   }
 
-  const account = await dbService.addAccount({
-    householdId: body.householdId || 'family_household',
-    userId: body.userId || '',
-    accountHolder: body.accountHolder.trim(),
-    accountType: body.accountType || 'upi',
-    accountNumberOrId: body.accountNumberOrId.trim(),
-    bankOrProvider: body.bankOrProvider?.trim() || 'Bank / UPI',
-    ifscOrHandle: body.ifscOrHandle?.trim() || '',
-    isPrimary: !!body.isPrimary,
-    notes: body.notes?.trim() || '',
-  });
-
+  const account = await dbService.addAccount(parseResult.data);
   return { success: true, message: `Added account for ${account.accountHolder}`, account };
 });
 
@@ -663,19 +892,21 @@ const otpStore = new Map<string, OtpEntry>();
 
 // 10. Send OTP Route (Phone / Email Verification)
 fastify.post('/api/auth/send-otp', async (request, reply) => {
-  const { identifier } = (request.body as { identifier?: string }) || {};
-  if (!identifier || identifier.trim().length < 4) {
-    return reply.status(400).send({ error: 'Please enter a valid phone number or email address' });
+  const parseResult = OtpSendSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Please enter a valid phone number or email address' });
   }
 
-  const clean = identifier.trim().toLowerCase();
+  const clean = parseResult.data.identifier.trim().toLowerCase();
   // Generate 6-digit random code
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = Date.now() + 5 * 60 * 1000; // 5 min expiry
 
   otpStore.set(clean, { identifier: clean, otp, expiresAt });
 
-  fastify.log.info({ identifier: clean, otp }, 'Dispatched authentication OTP');
+  // Redact PII in server log: log only partial masked hash
+  const maskedId = clean.length > 5 ? `${clean.slice(0, 2)}***${clean.slice(-3)}` : '***';
+  fastify.log.info({ maskedIdentifier: maskedId }, 'Dispatched authentication OTP');
 
   return {
     success: true,
@@ -687,11 +918,12 @@ fastify.post('/api/auth/send-otp', async (request, reply) => {
 
 // 11. Verify OTP Route
 fastify.post('/api/auth/verify-otp', async (request, reply) => {
-  const { identifier, otp } = (request.body as { identifier?: string; otp?: string }) || {};
-  if (!identifier || !otp) {
-    return reply.status(400).send({ error: 'Identifier and OTP are required' });
+  const parseResult = OtpVerifySchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: 'Identifier and valid OTP code are required' });
   }
 
+  const { identifier, otp } = parseResult.data;
   const clean = identifier.trim().toLowerCase();
   const entry = otpStore.get(clean);
 
@@ -720,26 +952,12 @@ fastify.get('/api/bills', async (request) => {
 });
 
 fastify.post('/api/bills', async (request, reply) => {
-  const body = request.body as Partial<MonthlyBillRecord>;
-  if (!body.title || !body.title.trim()) {
-    return reply.status(400).send({ error: 'Bill title is required' });
-  }
-  const amount = Number(body.amount);
-  if (isNaN(amount) || amount <= 0) {
-    return reply.status(400).send({ error: 'Please enter a valid bill amount' });
+  const parseResult = MonthlyBillCreateSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid bill details' });
   }
 
-  const bill = await dbService.addMonthlyBill({
-    householdId: body.householdId || 'family_household',
-    title: body.title.trim(),
-    category: (body.category as any) || 'other',
-    amount,
-    dueDay: Number(body.dueDay) || 5,
-    autoReminder: body.autoReminder !== false,
-    billerAccount: body.billerAccount?.trim() || '',
-    notes: body.notes?.trim() || '',
-  });
-
+  const bill = await dbService.addMonthlyBill(parseResult.data);
   return { success: true, message: `Scheduled monthly reminder for ${bill.title}`, bill };
 });
 
@@ -768,22 +986,15 @@ fastify.delete('/api/bills/:id', async (request, reply) => {
 
 // 13. Realistic Household Payment Gateway Simulation
 fastify.post('/api/bills/pay-gateway', async (request, reply) => {
-  const body = request.body as {
-    billId?: string;
-    billerName: string;
-    amount: number;
-    paymentMethod: 'upi' | 'card' | 'netbanking' | 'bbps';
-    details: Record<string, any>;
-  };
-
-  if (!body.amount || body.amount <= 0) {
-    return reply.status(400).send({ error: 'Invalid payment amount' });
+  const parseResult = BillPayGatewaySchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid payment parameters' });
   }
 
+  const body = parseResult.data;
   const txnId = `TXN_${Date.now()}_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
   const refNo = `REF${Math.floor(1000000000 + Math.random() * 9000000000)}`;
 
-  // If billId provided, automatically update bill status in database
   if (body.billId) {
     await dbService.payMonthlyBill(body.billId, {
       paidVia: body.paymentMethod.toUpperCase(),
@@ -813,27 +1024,12 @@ fastify.get('/api/khata', async (request) => {
 });
 
 fastify.post('/api/khata', async (request, reply) => {
-  const body = request.body as Partial<KhataRecord>;
-  if (!body.partyName || !body.partyName.trim()) {
-    return reply.status(400).send({ error: 'Vendor or person name is required' });
-  }
-  const amount = Number(body.amount);
-  if (isNaN(amount) || amount <= 0) {
-    return reply.status(400).send({ error: 'Please enter a valid amount' });
+  const parseResult = KhataCreateSchema.safeParse(request.body);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: parseResult.error.issues[0]?.message || 'Invalid khata entry details' });
   }
 
-  const entry = await dbService.addKhataEntry({
-    householdId: body.householdId || 'family_household',
-    partyName: body.partyName.trim(),
-    partyPhone: body.partyPhone?.trim() || '',
-    partyRole: (body.partyRole as any) || 'kirana',
-    type: body.type === 'got' ? 'got' : 'gave',
-    amount,
-    description: body.description?.trim() || 'Household calculation entry',
-    date: body.date || new Date().toISOString().split('T')[0],
-    upiId: body.upiId?.trim() || '',
-  });
-
+  const entry = await dbService.addKhataEntry(parseResult.data);
   return { success: true, message: `Recorded ${entry.type === 'gave' ? 'Debit' : 'Credit'} for ${entry.partyName}`, entry };
 });
 
@@ -853,6 +1049,21 @@ fastify.delete('/api/khata/:id', async (request, reply) => {
     return reply.status(404).send({ error: 'Khata entry not found' });
   }
   return { success: true, message: 'Khata entry removed' };
+});
+
+// 15. Permanent Household Purge / Deletion (GDPR & Privacy Compliant)
+fastify.delete('/api/household/:householdId', async (request, reply) => {
+  const parseResult = DeleteHouseholdParamsSchema.safeParse(request.params);
+  if (!parseResult.success) {
+    return reply.status(400).send({ error: 'Invalid householdId parameter' });
+  }
+
+  const result = await dbService.deleteHouseholdData(parseResult.data.householdId);
+  return {
+    success: true,
+    message: `All records for household ${parseResult.data.householdId} permanently removed.`,
+    ...result,
+  };
 });
 
 // Start Fastify Server
