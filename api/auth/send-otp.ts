@@ -1,1 +1,3 @@
-export { default } from '../otp/send.js';
+import handler from '../otp/send.js';
+export default handler;
+

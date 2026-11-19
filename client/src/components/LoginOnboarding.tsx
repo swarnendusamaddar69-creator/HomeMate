@@ -890,7 +890,7 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
               </p>
             </div>
 
-            <form onSubmit={signinWithOtp ? handleRequestSigninOtp : handleRequestSigninOtp} className="space-y-4 text-xs">
+            <form onSubmit={signinWithOtp ? handleSignIn : handleRequestSigninOtp} className="space-y-4 text-xs">
               {signinError && (
                 <div className="p-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2.5 animate-fadeIn">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
@@ -943,16 +943,15 @@ export const LoginOnboarding: React.FC<LoginOnboardingProps> = ({
               ) : null}
 
               <button
-                type="button"
-                onClick={signinWithOtp ? (e) => handleSignIn(e as any) : handleRequestSigninOtp}
+                type="submit"
                 disabled={signinLoading}
                 className="w-full min-h-[48px] py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-black text-sm shadow-xl shadow-emerald-900/30 transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
               >
                 {signinLoading ? (
-                  <span>Sending 6-digit code...</span>
+                  <span>Sending verification code...</span>
                 ) : (
                   <>
-                    <span>{signinWithOtp ? 'Sign In with Password' : 'Sign In with Verification Code'}</span>
+                    <span>{signinWithOtp ? 'Sign In with Password' : 'Sign In'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

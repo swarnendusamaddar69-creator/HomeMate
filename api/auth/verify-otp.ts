@@ -1,1 +1,3 @@
-export { default } from '../otp/verify.js';
+import handler from '../otp/verify.js';
+export default handler;
+
