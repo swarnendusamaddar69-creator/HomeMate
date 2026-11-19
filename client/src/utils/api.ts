@@ -17,7 +17,15 @@ export async function checkBackendHealth(): Promise<BackendHealth | null> {
 
 export function getStoredGeminiApiKey(): string | null {
   try {
-    return localStorage.getItem('homemate_gemini_api_key') || null;
+    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+    if (envKey && typeof envKey === 'string' && envKey.trim().length > 10) {
+      return envKey.trim();
+    }
+    const localKey = localStorage.getItem('homemate_gemini_api_key');
+    if (localKey && localKey.trim().length > 10) {
+      return localKey.trim();
+    }
+    return null;
   } catch {
     return null;
   }
@@ -54,7 +62,13 @@ async function callGeminiVisionDirect(
   base64Image: string,
   mimeType: string = 'image/jpeg'
 ): Promise<any> {
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = [
+    'gemini-3-flash-preview',
+    'gemini-3.8-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest',
+    'gemini-2.5-flash',
+  ];
   let lastError: any = null;
 
   for (const model of models) {

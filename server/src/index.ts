@@ -115,9 +115,9 @@ fastify.post('/api/scan/fridge', async (request, reply) => {
     if (apiKey) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        // Use gemini-3.8-flash for high-speed, modern multimodal vision
+        // Use gemini-3-flash-preview for high-speed, modern multimodal vision
         let model = genAI.getGenerativeModel({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-3-flash-preview',
           generationConfig: {
             responseMimeType: 'application/json',
           },
@@ -165,6 +165,7 @@ Return ONLY a valid JSON object matching this schema:
 }`;
 
         const candidateModels = [
+          'gemini-3-flash-preview',
           'gemini-3.8-flash',
           'gemini-3.5-flash',
           'gemini-3.1-flash-lite',
@@ -310,6 +311,7 @@ Analyze this prescription image and return ONLY a valid JSON object matching thi
 Ensure standard Indian tablet pack sizes (usually 10, 14, 15, or 30 tabs per strip). Return pure JSON only without markdown fences.`;
 
         const candidateModels = [
+          'gemini-3-flash-preview',
           'gemini-3.8-flash',
           'gemini-3.5-flash',
           'gemini-3.1-flash-lite',
