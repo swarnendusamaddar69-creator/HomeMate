@@ -53,7 +53,6 @@ import { LoginOnboarding } from './components/LoginOnboarding';
 import { BackgroundAura } from './components/BackgroundAura';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { FamilyDatabaseModal } from './components/FamilyDatabaseModal';
-import { EmptyStateView } from './components/EmptyStateView';
 import { NotFoundPage } from './components/NotFoundPage';
 import { Footer } from './components/Footer';
 import { ToastNotification, ToastMessage } from './components/ToastNotification';
@@ -161,44 +160,65 @@ export function App() {
     householdPantryMap[activeHouseholdKey] ||
     getStoredData<PantryItem[]>(`pantry_v3_${activeHouseholdKey}`, []);
 
-  // Domain data (Pure user-driven raw data)
+  // Domain data (100% isolated per household)
   const [medicines, setMedicines] = useState<Medicine[]>(() =>
-    getStoredData<Medicine[]>('medicines_v3', [])
+    getStoredData<Medicine[]>(`medicines_v3_${activeHouseholdKey}`, [])
   );
 
   const [elderTodos, setElderTodos] = useState<ElderTodo[]>(() =>
-    getStoredData<ElderTodo[]>('elder_todos_v3', [])
+    getStoredData<ElderTodo[]>(`elder_todos_v3_${activeHouseholdKey}`, [])
   );
 
   const [hostelChores, setHostelChores] = useState<HostelChore[]>(() =>
-    getStoredData<HostelChore[]>('chores_v3', [])
+    getStoredData<HostelChore[]>(`chores_v3_${activeHouseholdKey}`, [])
   );
 
   const [hostelExpenses, setHostelExpenses] = useState<HostelExpense[]>(() =>
-    getStoredData<HostelExpense[]>('expenses_v3', [])
+    getStoredData<HostelExpense[]>(`expenses_v3_${activeHouseholdKey}`, [])
   );
 
   const [messMenu, setMessMenu] = useState<MessMenuDay[]>(() =>
-    getStoredData<MessMenuDay[]>('mess_v3', [])
+    getStoredData<MessMenuDay[]>(`mess_v3_${activeHouseholdKey}`, [])
   );
 
   const [familyChores, setFamilyChores] = useState<FamilyChore[]>(() =>
-    getStoredData<FamilyChore[]>('family_chores_v3', [])
+    getStoredData<FamilyChore[]>(`family_chores_v3_${activeHouseholdKey}`, [])
   );
 
   const [prescriptions, setPrescriptions] = useState<Prescription[]>(() =>
-    getStoredData<Prescription[]>('prescriptions_v3', [])
+    getStoredData<Prescription[]>(`prescriptions_v3_${activeHouseholdKey}`, [])
   );
 
   const [medsToBuy, setMedsToBuy] = useState<MedicineToBuy[]>(() =>
-    getStoredData<MedicineToBuy[]>('meds_to_buy_v3', [])
+    getStoredData<MedicineToBuy[]>(`meds_to_buy_v3_${activeHouseholdKey}`, [])
   );
+
+  // Sync isolated household state whenever the active household changes
+  useEffect(() => {
+    setMedicines(getStoredData<Medicine[]>(`medicines_v3_${activeHouseholdKey}`, []));
+    setElderTodos(getStoredData<ElderTodo[]>(`elder_todos_v3_${activeHouseholdKey}`, []));
+    setHostelChores(getStoredData<HostelChore[]>(`chores_v3_${activeHouseholdKey}`, []));
+    setHostelExpenses(getStoredData<HostelExpense[]>(`expenses_v3_${activeHouseholdKey}`, []));
+    setMessMenu(getStoredData<MessMenuDay[]>(`mess_v3_${activeHouseholdKey}`, []));
+    setFamilyChores(getStoredData<FamilyChore[]>(`family_chores_v3_${activeHouseholdKey}`, []));
+    setPrescriptions(getStoredData<Prescription[]>(`prescriptions_v3_${activeHouseholdKey}`, []));
+    setMedsToBuy(getStoredData<MedicineToBuy[]>(`meds_to_buy_v3_${activeHouseholdKey}`, []));
+  }, [activeHouseholdKey]);
+
+  // Real URL path & server issue error tracking
+  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handlePopState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Modals & Widgets toggles
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'dashboard' | 'empty' | '404'>('dashboard');
   const [weatherWidgetEnabled, setWeatherWidgetEnabled] = useState(true);
   const [voiceHudEnabled, setVoiceHudEnabled] = useState(true);
   const [undoToast, setUndoToast] = useState<{ message: string; onUndo: () => void } | null>(null);
@@ -219,15 +239,11 @@ export function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Dynamic Page Titles (Fix page Titles requirement)
+  // Dynamic Page Titles
   useEffect(() => {
     let title = 'HomeMate — Smart Household AI Operating System';
     if (!isLoggedIn) {
       title = 'HomeMate — Sign In or Setup Household';
-    } else if (activeView === '404') {
-      title = 'HomeMate — 404 Room Not Found';
-    } else if (activeView === 'empty') {
-      title = 'HomeMate — Fresh Household Setup';
     } else if (currentMode === 'elder') {
       title = 'HomeMate — Elder Care & Medication Reminder';
     } else if (currentMode === 'hostel') {
@@ -236,7 +252,7 @@ export function App() {
       title = 'HomeMate — Family Household & Smart OS';
     }
     document.title = title;
-  }, [currentMode, activeView, isLoggedIn]);
+  }, [currentMode, isLoggedIn]);
 
   const t = translations[language];
 
@@ -298,36 +314,36 @@ export function App() {
   }, [currentMode]);
 
   useEffect(() => {
-    saveStoredData('medicines_v3', medicines);
-  }, [medicines]);
+    saveStoredData(`medicines_v3_${activeHouseholdKey}`, medicines);
+  }, [medicines, activeHouseholdKey]);
 
   useEffect(() => {
-    saveStoredData('elder_todos_v3', elderTodos);
-  }, [elderTodos]);
+    saveStoredData(`elder_todos_v3_${activeHouseholdKey}`, elderTodos);
+  }, [elderTodos, activeHouseholdKey]);
 
   useEffect(() => {
-    saveStoredData('chores_v3', hostelChores);
-  }, [hostelChores]);
+    saveStoredData(`chores_v3_${activeHouseholdKey}`, hostelChores);
+  }, [hostelChores, activeHouseholdKey]);
 
   useEffect(() => {
-    saveStoredData('expenses_v3', hostelExpenses);
-  }, [hostelExpenses]);
+    saveStoredData(`expenses_v3_${activeHouseholdKey}`, hostelExpenses);
+  }, [hostelExpenses, activeHouseholdKey]);
 
   useEffect(() => {
-    saveStoredData('mess_v3', messMenu);
-  }, [messMenu]);
+    saveStoredData(`mess_v3_${activeHouseholdKey}`, messMenu);
+  }, [messMenu, activeHouseholdKey]);
 
   useEffect(() => {
-    saveStoredData('family_chores_v3', familyChores);
-  }, [familyChores]);
+    saveStoredData(`family_chores_v3_${activeHouseholdKey}`, familyChores);
+  }, [familyChores, activeHouseholdKey]);
 
   useEffect(() => {
-    saveStoredData('prescriptions_v3', prescriptions);
-  }, [prescriptions]);
+    saveStoredData(`prescriptions_v3_${activeHouseholdKey}`, prescriptions);
+  }, [prescriptions, activeHouseholdKey]);
 
   useEffect(() => {
-    saveStoredData('meds_to_buy_v3', medsToBuy);
-  }, [medsToBuy]);
+    saveStoredData(`meds_to_buy_v3_${activeHouseholdKey}`, medsToBuy);
+  }, [medsToBuy, activeHouseholdKey]);
 
   // Setters that persist strictly to the active household's isolated storage
   const setShoppingForCurrentHousehold = (
@@ -725,41 +741,36 @@ export function App() {
     }, 6000);
   };
 
-  const handleLoadStarterPack = () => {
-    handleAddShoppingItem({
-      title: 'Fresh Amul Milk',
-      localTitle: 'दूध',
-      quantity: '2 Packets',
-      category: 'dairy',
-      addedBy: currentUser?.displayName || 'Me',
-      status: 'pending',
-      reason: 'routine',
-    });
-    handleAddShoppingItem({
-      title: 'Whole Wheat Atta',
-      localTitle: 'आटा',
-      quantity: '5 kg',
-      category: 'staples',
-      addedBy: currentUser?.displayName || 'Me',
-      status: 'pending',
-      reason: 'routine',
-    });
-    handleAddShoppingItem({
-      title: 'Fresh Farm Tomatoes',
-      localTitle: 'टमाटर',
-      quantity: '1 kg',
-      category: 'vegetables',
-      addedBy: currentUser?.displayName || 'Me',
-      status: 'pending',
-      reason: 'routine',
-    });
-    addToast({
-      type: 'success',
-      title: 'Household Starter Pack Loaded',
-      message: 'Added fresh milk, whole wheat flour, and tomatoes to your active list!',
-    });
-    setActiveView('dashboard');
-  };
+  // Real 404 Room Not Found (only when URL path is invalid)
+  if (currentPath !== '/' && currentPath !== '') {
+    return (
+      <NotFoundPage
+        type="404"
+        onReturnHome={() => {
+          window.history.pushState(null, '', '/');
+          setCurrentPath('/');
+        }}
+        onSelectMode={handleSelectMode}
+      />
+    );
+  }
+
+  // Real Server Error Page (only when a backend or server connectivity issue occurs)
+  if (serverError) {
+    return (
+      <NotFoundPage
+        type="server_error"
+        errorMessage={serverError}
+        onReturnHome={() => {
+          setServerError(null);
+          window.history.pushState(null, '', '/');
+          setCurrentPath('/');
+        }}
+        onRetry={() => setServerError(null)}
+        onSelectMode={handleSelectMode}
+      />
+    );
+  }
 
   // If user is not logged in or has no active session, show the Dedicated Login Onboarding screen
   if (!isLoggedIn || !currentUser) {
@@ -795,35 +806,11 @@ export function App() {
         onLanguageChange={setLanguage}
         onOpenWidgetSuggestions={() => setIsWidgetModalOpen(true)}
         onOpenDatabase={() => setIsDatabaseModalOpen(true)}
-        onOpenEmptyState={() => setActiveView('empty')}
-        onOpen404={() => setActiveView('404')}
         onSelectMode={handleSelectMode}
       />
 
-      {/* 2. Active View Container: Empty State Page */}
-      {activeView === 'empty' && (
-        <EmptyStateView
-          currentMode={currentMode}
-          language={language}
-          onOpenScan={() => setIsScanModalOpen(true)}
-          onOpenDatabase={() => setIsDatabaseModalOpen(true)}
-          onAddShoppingClick={() => setActiveView('dashboard')}
-          onReturnToDashboard={() => setActiveView('dashboard')}
-          onLoadStarterPack={handleLoadStarterPack}
-        />
-      )}
-
-      {/* 3. Active View Container: 404 Room Not Found Page */}
-      {activeView === '404' && (
-        <NotFoundPage
-          onReturnHome={() => setActiveView('dashboard')}
-          onSelectMode={handleSelectMode}
-        />
-      )}
-
-      {/* 4. Active View Container: Main Dashboard */}
-      {activeView === 'dashboard' && (
-        <main className="relative z-10 max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5 sm:space-y-6 pb-28 sm:pb-12 safe-area-bottom">
+      {/* 2. Active View Container: Main Dashboard */}
+      <main className="relative z-10 max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5 sm:space-y-6 pb-28 sm:pb-12 safe-area-bottom">
         {/* Quick Hero Banner with Real Camera Fridge Scan Button */}
         <div
           className={`flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-3xl border shadow-xs interactive-card ${
@@ -973,14 +960,11 @@ export function App() {
           />
         )}
       </main>
-      )}
 
       {/* Footer with clickable phone number in description at bottom, clickable email, links */}
       <Footer
         currentMode={currentMode}
         onOpenDatabase={() => setIsDatabaseModalOpen(true)}
-        onOpenEmptyState={() => setActiveView('empty')}
-        onOpen404={() => setActiveView('404')}
         onOpenWidgets={() => setIsWidgetModalOpen(true)}
         onSelectMode={handleSelectMode}
       />

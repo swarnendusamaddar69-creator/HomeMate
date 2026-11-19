@@ -14,7 +14,6 @@ import {
   Heart,
   GraduationCap,
   Users,
-  Compass,
   Phone,
   Mail,
   ShieldCheck,
@@ -31,8 +30,6 @@ interface NavbarProps {
   onLanguageChange: (lang: Language) => void;
   onOpenWidgetSuggestions: () => void;
   onOpenDatabase?: () => void;
-  onOpenEmptyState?: () => void;
-  onOpen404?: () => void;
   onSelectMode?: (mode: AppMode) => void;
 }
 
@@ -45,8 +42,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLanguageChange,
   onOpenWidgetSuggestions,
   onOpenDatabase,
-  onOpenEmptyState,
-  onOpen404,
   onSelectMode,
 }) => {
   const [timeStr, setTimeStr] = useState<string>('');
@@ -395,37 +390,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {onOpenEmptyState && (
-              <button
-                onClick={() => {
-                  onOpenEmptyState();
-                  setIsMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold cursor-pointer transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Home className="w-4 h-4 text-slate-600" />
-                  <span>Empty State / Starter View</span>
-                </div>
-                <span className="text-[10px] text-slate-500">&rarr;</span>
-              </button>
-            )}
-
-            {onOpen404 && (
-              <button
-                onClick={() => {
-                  onOpen404();
-                  setIsMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold cursor-pointer transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Compass className="w-4 h-4 text-slate-600" />
-                  <span>404 Error Page Preview</span>
-                </div>
-                <span className="text-[10px] text-slate-500">&rarr;</span>
-              </button>
-            )}
 
             <button
               onClick={() => {

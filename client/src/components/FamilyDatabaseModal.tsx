@@ -98,7 +98,7 @@ export const FamilyDatabaseModal: React.FC<FamilyDatabaseModalProps> = ({
         setMembers(remoteMembers);
         saveStoredFamilyMembers(remoteMembers);
       } else {
-        const local = getStoredFamilyMembers();
+        const local = getStoredFamilyMembers().filter((m) => !householdId || m.householdId === householdId);
         setMembers(local);
       }
 
@@ -106,7 +106,7 @@ export const FamilyDatabaseModal: React.FC<FamilyDatabaseModalProps> = ({
         setAccounts(remoteAccounts);
         saveStoredAccounts(remoteAccounts);
       } else {
-        const localAcc = getStoredAccounts();
+        const localAcc = getStoredAccounts().filter((a) => !householdId || a.householdId === householdId);
         setAccounts(localAcc);
       }
 

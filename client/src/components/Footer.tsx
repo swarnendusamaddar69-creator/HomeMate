@@ -3,13 +3,8 @@ import {
   Heart,
   Phone,
   Mail,
-  ShieldCheck,
   Sparkles,
   Database,
-  HelpCircle,
-  AlertTriangle,
-  Compass,
-  ArrowUpRight,
   ExternalLink,
 } from 'lucide-react';
 import { AppMode } from '../types';
@@ -17,8 +12,6 @@ import { AppMode } from '../types';
 interface FooterProps {
   currentMode: AppMode;
   onOpenDatabase: () => void;
-  onOpenEmptyState: () => void;
-  onOpen404: () => void;
   onOpenWidgets: () => void;
   onSelectMode: (mode: AppMode) => void;
 }
@@ -26,8 +19,6 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = ({
   currentMode,
   onOpenDatabase,
-  onOpenEmptyState,
-  onOpen404,
   onOpenWidgets,
   onSelectMode,
 }) => {
@@ -143,22 +134,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <span>🎓 Hostel & Splitwise</span>
                 </button>
               </li>
-              <li>
-                <button
-                  onClick={onOpenEmptyState}
-                  className="hover:text-emerald-600 transition-colors text-left flex items-center gap-1.5 cursor-pointer font-semibold"
-                >
-                  <span>📦 Empty State / Starter Page</span>
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={onOpen404}
-                  className="hover:text-rose-500 transition-colors text-left flex items-center gap-1.5 cursor-pointer font-semibold"
-                >
-                  <span>🧭 404 Error Page Preview</span>
-                </button>
-              </li>
+
             </ul>
           </div>
 
