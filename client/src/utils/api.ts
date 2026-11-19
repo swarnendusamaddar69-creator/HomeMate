@@ -326,12 +326,28 @@ export async function sendOtp(
   identifier: string
 ): Promise<{ success: boolean; message: string; cooldownSeconds?: number }> {
   const clean = identifier.trim().toLowerCase();
-  const res = await fetch('/api/otp/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ email: clean, identifier: clean }),
-  });
+  let res: Response;
+
+  try {
+    res = await fetch('/api/otp/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: clean, identifier: clean }),
+    });
+
+    if (res.status === 404) {
+      res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: clean, identifier: clean }),
+      });
+    }
+  } catch (err: any) {
+    throw new Error('Network error: Unable to reach the authentication service. Please check your connection.');
+  }
+
   const text = await res.text();
   let data: any = {};
   try {
@@ -339,10 +355,11 @@ export async function sendOtp(
   } catch {
     throw new Error(
       res.status === 404
-        ? 'OTP service endpoint is updating. Please retry in a few seconds.'
+        ? 'OTP service endpoint is starting up. Please wait a moment and try again.'
         : `Server error (${res.status}): ${text.slice(0, 100)}`
     );
   }
+
   if (!res.ok) throw new Error(data.error || 'Failed to send OTP code');
   return data;
 }
@@ -358,12 +375,28 @@ export async function verifyOtp(
 }> {
   const clean = identifier.trim().toLowerCase();
   const cleanToken = token.trim();
-  const res = await fetch('/api/otp/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ email: clean, identifier: clean, token: cleanToken, otp: cleanToken }),
-  });
+  let res: Response;
+
+  try {
+    res = await fetch('/api/otp/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: clean, identifier: clean, token: cleanToken, otp: cleanToken }),
+    });
+
+    if (res.status === 404) {
+      res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: clean, identifier: clean, token: cleanToken, otp: cleanToken }),
+      });
+    }
+  } catch (err: any) {
+    throw new Error('Network error: Unable to reach verification service. Please check your connection.');
+  }
+
   const text = await res.text();
   let data: any = {};
   try {
@@ -371,10 +404,11 @@ export async function verifyOtp(
   } catch {
     throw new Error(
       res.status === 404
-        ? 'OTP service endpoint is updating. Please retry.'
+        ? 'Verification service endpoint is starting up. Please try again.'
         : `Server error (${res.status}): ${text.slice(0, 100)}`
     );
   }
+
   if (!res.ok) throw new Error(data.error || 'Invalid or expired OTP code');
   return {
     success: true,
