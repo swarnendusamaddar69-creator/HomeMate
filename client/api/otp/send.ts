@@ -1,15 +1,25 @@
 import { z } from 'zod';
-import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
+import { checkRateLimit, recordSend, storeOtp } from './storage.js';
+import { getEmailAdapter } from './email-adapter.js';
 
 const SendOtpSchema = z.object({
   email: z.string().email().optional(),
   identifier: z.string().min(3).optional(),
+  turnstileToken: z.string().optional(),
 }).refine((d) => !!(d.email || d.identifier), {
   message: 'Please enter a valid email address',
 });
 
+function getClientIp(req: any): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.headers['x-real-ip'] || req.socket?.remoteAddress || '127.0.0.1';
+}
+
 export default async function handler(req: any, res: any) {
-  // Always set CORS & JSON headers
   res.setHeader('Content-Type', 'application/json');
 
   if (req.method !== 'POST') {
@@ -27,44 +37,52 @@ export default async function handler(req: any, res: any) {
 
   const parsed = SendOtpSchema.safeParse(body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Please enter a valid email address' });
+    return res.status(400).json({
+      error: parsed.error.issues[0]?.message || 'Please enter a valid email address',
+    });
   }
 
-  const rawEmail = (parsed.data.email || parsed.data.identifier || '').toLowerCase().trim();
-  
-  // Basic email pattern check
-  if (!rawEmail.includes('@') || !rawEmail.includes('.')) {
+  const email = (parsed.data.email || parsed.data.identifier || '').toLowerCase().trim();
+  if (!email.includes('@') || !email.includes('.')) {
     return res.status(400).json({ error: 'Please enter a valid email address to receive your 6-digit OTP.' });
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  const ip = getClientIp(req);
 
-  if (supabaseUrl && supabaseKey) {
-    try {
-      const supabase = createClient(supabaseUrl, supabaseKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email: rawEmail,
-        options: { shouldCreateUser: true },
-      });
-
-      if (error) {
-        console.error('[API Send OTP] Supabase error:', error.message);
-      }
-    } catch (err) {
-      console.error('[API Send OTP] Unexpected error:', err);
-    }
-  } else {
-    console.warn('[API Send OTP] Supabase credentials not set in Vercel settings.');
+  // ─── Rate Limiting (3 per hour per email/IP, 30s resend cooldown) ───
+  const rateLimit = await checkRateLimit(email, ip);
+  if (!rateLimit.allowed) {
+    return res.status(429).json({
+      error: rateLimit.reason,
+      cooldownSeconds: rateLimit.cooldownSeconds || 30,
+    });
   }
 
-  // Identical response whether or not account exists to prevent email enumeration
+  // ─── 6-Digit Cryptographic Code Generation ───
+  // crypto.randomInt ensures unbiased, cryptographically strong random generation
+  const code = crypto.randomInt(100000, 1000000).toString();
+
+  // Store HMAC-SHA256 hash in storage (Upstash Redis or in-memory fallback, 5-minute TTL)
+  await storeOtp(email, code);
+  await recordSend(email, ip);
+
+  // ─── Dispatch via Email Provider Adapter ───
+  const emailAdapter = getEmailAdapter();
+  const dispatchResult = await emailAdapter.sendOtp(email, code);
+
+  // If email provider is unconfigured, notify clearly
+  if (!dispatchResult.success) {
+    console.error(`[OTP Send] Dispatch failed via ${emailAdapter.name}:`, dispatchResult.error);
+    return res.status(503).json({
+      error: dispatchResult.error || 'Failed to dispatch verification email. Please check provider settings.',
+      providerConfigured: false,
+    });
+  }
+
+  // Never return or log the code
   return res.status(200).json({
     success: true,
-    message: 'If an account exists, a 6-digit verification code has been sent.',
+    message: `A 6-digit verification code has been dispatched to ${email}.`,
     cooldownSeconds: 30,
   });
 }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { getOtpRecord, incrementOtpAttempts, deleteOtpRecord, hashOtp, timingSafeCompare } from './storage.js';
 
 const VerifyOtpSchema = z.object({
   email: z.string().email().optional(),
@@ -52,65 +52,66 @@ export default async function handler(req: any, res: any) {
   const email = (parsed.data.email || parsed.data.identifier || '').toLowerCase().trim();
   const token = (parsed.data.token || parsed.data.otp || '').trim();
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    return res.status(503).json({
-      error: 'Authentication provider is not yet configured on this instance. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel settings.',
+  // ─── 1. Retrieve Stored OTP Record ───
+  const record = await getOtpRecord(email);
+  if (!record) {
+    return res.status(400).json({
+      error: 'Invalid or expired verification code. Please request a new code.',
     });
   }
 
-  try {
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
+  // ─── 2. Increment & Check Max 5 Attempts ───
+  const attempts = await incrementOtpAttempts(email, record);
+  if (attempts > record.maxAttempts) {
+    await deleteOtpRecord(email);
+    return res.status(429).json({
+      error: 'Too many incorrect attempts. For security, this code has been invalidated. Please request a new code.',
     });
+  }
 
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'email',
+  // ─── 3. Constant-Time Hash Comparison ───
+  const candidateHash = hashOtp(token);
+  const isMatch = timingSafeCompare(candidateHash, record.hash);
+
+  if (!isMatch) {
+    const remaining = Math.max(0, record.maxAttempts - attempts);
+    return res.status(400).json({
+      error: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`,
     });
+  }
 
-    if (error || !data.user) {
-      return res.status(400).json({
-        error: error?.message || 'Invalid or expired 6-digit verification code.',
-      });
-    }
+  // ─── 4. Delete Record Immediately After Successful Use ───
+  await deleteOtpRecord(email);
 
-    const userId = data.user.id;
-    const userMeta = data.user.user_metadata || {};
-    const householdId = userMeta.householdId || `hh_${crypto.createHash('sha256').update(email).digest('hex').substring(0, 16)}`;
-    const mode = (userMeta.mode as string) || 'family';
-    const displayName = userMeta.displayName || email.split('@')[0];
+  // ─── 5. Issue Secure httpOnly Cookie Session ───
+  const userId = `u_${crypto.createHash('sha256').update(email).digest('hex').substring(0, 16)}`;
+  const householdId = `hh_${crypto.createHash('sha256').update(email).digest('hex').substring(0, 16)}`;
+  const displayName = email.split('@')[0];
+  const mode = 'family';
 
-    const sessionToken = createSessionToken({
-      userId,
+  const sessionToken = createSessionToken({
+    userId,
+    email,
+    householdId,
+    mode,
+  });
+
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  const secureFlag = isProd ? '; Secure' : '';
+  const cookieHeader = `${SESSION_COOKIE_NAME}=${sessionToken}; HttpOnly${secureFlag}; SameSite=Lax; Path=/; Max-Age=${SESSION_DURATION_SECONDS}`;
+
+  res.setHeader('Set-Cookie', cookieHeader);
+
+  return res.status(200).json({
+    success: true,
+    verified: true,
+    message: 'Authentication successful.',
+    user: {
+      id: userId,
       email,
+      displayName,
       householdId,
       mode,
-    });
-
-    const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
-    const secureFlag = isProd ? '; Secure' : '';
-    const cookieHeader = `${SESSION_COOKIE_NAME}=${sessionToken}; HttpOnly${secureFlag}; SameSite=Lax; Path=/; Max-Age=${SESSION_DURATION_SECONDS}`;
-
-    res.setHeader('Set-Cookie', cookieHeader);
-
-    return res.status(200).json({
-      success: true,
-      verified: true,
-      message: 'Authentication successful.',
-      user: {
-        id: userId,
-        email,
-        displayName,
-        householdId,
-        mode,
-      },
-    });
-  } catch (err: any) {
-    console.error('[API Verify OTP] Verification error:', err);
-    return res.status(500).json({ error: 'Internal server error during verification' });
-  }
+    },
+  });
 }
